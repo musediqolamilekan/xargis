@@ -215,6 +215,32 @@ def print_file_profile(profile: FileProfile):
         if len(all_types) > 15:
             print(f"  {DIM}...and {len(all_types)-15} more{RESET}")
 
+    # ── Call Relationships & Deep Semantics ────────────────────────
+    if profile.calls:
+        _section(f"CALL RELATIONSHIPS ({len(profile.calls)} invoked symbols)", "📞")
+        print(f"  {CYAN}{', '.join(profile.calls[:18])}{RESET}")
+        if len(profile.calls) > 18:
+            print(f"  {DIM}...and {len(profile.calls)-18} more{RESET}")
+
+    if profile.api_endpoints:
+        _section(f"API CONTRACTS & ENDPOINTS ({len(profile.api_endpoints)})", "🌐")
+        for ep in profile.api_endpoints[:12]:
+            print(f"  {GREEN}▸ {ep}{RESET}")
+
+    if profile.db_interactions:
+        _section(f"DATABASE INTERACTIONS ({len(profile.db_interactions)})", "🗄️")
+        for db_op in profile.db_interactions[:12]:
+            print(f"  {YELLOW}▸ {db_op}{RESET}")
+
+    if profile.service_calls:
+        _section(f"EXTERNAL SERVICE DEPENDENCIES ({len(profile.service_calls)})", "🔌")
+        for svc in profile.service_calls[:12]:
+            print(f"  {MAGENTA}▸ {svc}{RESET}")
+
+    if profile.config_keys:
+        _section(f"CONFIGURATION & ENV DATA FLOWS ({len(profile.config_keys)})", "🔧")
+        print(f"  {WHITE}{', '.join(profile.config_keys[:20])}{RESET}")
+
     # ── TODOs ──────────────────────────────────────────────────────
     if profile.todos:
         _section(f"TODOs / FIXMEs ({len(profile.todos)})", "🗒️")

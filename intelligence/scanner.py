@@ -1,5 +1,6 @@
 import os
 import json
+import re
 import warnings
 from datetime import datetime
 from git import Repo, InvalidGitRepositoryError
@@ -129,6 +130,10 @@ def parse_composer_manifest(repo_path: str, context: EcosystemContext) -> None:
 
     require = data.get("require") if isinstance(data.get("require"), dict) else {}
     require_dev = data.get("require-dev") if isinstance(data.get("require-dev"), dict) else {}
+    for pkg_map in (require, require_dev):
+        for pkg_name, ver in pkg_map.items():
+            if isinstance(pkg_name, str) and isinstance(ver, str):
+                context.package_versions[pkg_name] = ver
     packages = set(require) | set(require_dev)
     if "laravel/framework" in packages:
         _append_unique(context.detected_frameworks, "laravel")
@@ -156,6 +161,9 @@ def parse_package_json_manifest(repo_path: str, context: EcosystemContext) -> No
         block = data.get(key)
         if isinstance(block, dict):
             dependency_names.update(str(name) for name in block)
+            for pkg_name, ver in block.items():
+                if isinstance(pkg_name, str) and isinstance(ver, str):
+                    context.package_versions[pkg_name] = ver
 
     if "next" in dependency_names or "nextjs" in dependency_names:
         _append_unique(context.detected_frameworks, "nextjs")
@@ -226,23 +234,48 @@ def parse_python_signatures(repo_path: str, context: EcosystemContext) -> None:
                 dependencies = poetry.get("dependencies")
                 if isinstance(dependencies, dict):
                     _tag_python_frameworks(" ".join(str(name) for name in dependencies), context)
+                    for pkg_name, ver in dependencies.items():
+                        if isinstance(pkg_name, str):
+                            if isinstance(ver, str):
+                                context.package_versions[pkg_name] = ver
+                            elif isinstance(ver, dict) and isinstance(ver.get("version"), str):
+                                context.package_versions[pkg_name] = ver["version"]
 
             project = data.get("project") if isinstance(data.get("project"), dict) else {}
             deps = project.get("dependencies")
             if isinstance(deps, list):
                 _tag_python_frameworks(" ".join(str(item) for item in deps), context)
+                for item in deps:
+                    if isinstance(item, str):
+                        m = re.match(r"^\s*([A-Za-z0-9_.-]+)\s*(.*)$", item.split(";")[0].strip())
+                        if m:
+                            context.package_versions[m.group(1)] = m.group(2).strip() or "*"
 
     requirements_path = os.path.join(repo_path, "requirements.txt")
     if os.path.isfile(requirements_path):
         text = _read_text_manifest(requirements_path)
         if text is not None:
             _tag_python_frameworks(text, context)
+            for raw_line in text.splitlines():
+                line = raw_line.split("#", 1)[0].strip()
+                if not line or line.startswith("-"):
+                    continue
+                m = re.match(r"^([A-Za-z0-9_.-]+)\s*(.*)$", line.split(";")[0].strip())
+                if m:
+                    context.package_versions[m.group(1)] = m.group(2).strip() or "*"
 
 
 def parse_go_signatures(repo_path: str, context: EcosystemContext) -> None:
     path = os.path.join(repo_path, "go.mod")
     if os.path.isfile(path):
         _append_unique(context.detected_frameworks, "go")
+        text = _read_text_manifest(path)
+        if text is not None:
+            for raw_line in text.splitlines():
+                line = raw_line.split("//", 1)[0].strip()
+                m = re.match(r"^(?:require\s+)?([A-Za-z0-9_./-]+\.[A-Za-z0-9_./-]+)\s+(v[0-9A-Za-z.+_-]+)$", line)
+                if m:
+                    context.package_versions[m.group(1)] = m.group(2)
 
 
 def discover_ecosystem_context(repo_path: str) -> EcosystemContext:
@@ -382,6 +415,11 @@ def to_dict(intel: RepoIntelligence) -> dict:
                 "size_bytes": fa.size_bytes,
                 "functions": fa.functions,
                 "classes": fa.classes,
+                "calls": fa.calls[:50],
+                "api_endpoints": fa.api_endpoints,
+                "db_interactions": fa.db_interactions,
+                "service_calls": fa.service_calls,
+                "config_keys": fa.config_keys,
                 "imports": [imp[:120] for imp in fa.imports],  # truncate long imports
                 "todos": len(fa.todos),
                 "analysis_tier": fa.analysis_tier,

@@ -16,7 +16,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
-from typing import Iterable, Optional
+from typing import Iterable, Mapping, Optional
 
 try:
     from git import Repo, InvalidGitRepositoryError
@@ -105,7 +105,7 @@ def _lines_overlap(symbol: SymbolLocation, line_range: DeploymentDiffLine) -> bo
 
 def cross_reference_symbol_targets(
     diff_files: Iterable[DeploymentDiffFile],
-    symbol_targets: dict[str, Iterable[SymbolLocation]],
+    symbol_targets: Mapping[str, Iterable[SymbolLocation]],
 ) -> tuple[DeploymentSymbolMatch, ...]:
     """Return target symbols whose source ranges overlap changed target lines."""
     matches: list[DeploymentSymbolMatch] = []
@@ -190,7 +190,8 @@ def get_file_change_counts(
     Returns a dict of { repo-relative file path: commit_count }
     for all files touched within the last `days` days.
 
-    Capped at `max_commits` to keep startup time manageable.
+    Uses a single `git log --name-only` pass capped at `max_commits`
+    instead of per-commit `commit.stats` subprocess calls.
     Returns an empty dict if git is unavailable or repo has no history.
     """
     if not GIT_AVAILABLE:
@@ -205,13 +206,26 @@ def get_file_change_counts(
     counts: dict[str, int] = {}
 
     try:
-        for commit in repo.iter_commits(max_count=max_commits):
-            commit_dt = datetime.fromtimestamp(commit.committed_date, tz=timezone.utc)
-            if commit_dt < cutoff:
-                break
-            # commit.stats.files keys are paths relative to repo root
-            for filepath in commit.stats.files:
-                counts[filepath] = counts.get(filepath, 0) + 1
+        raw_log = repo.git.log(
+            f"-n{max_commits}",
+            "--pretty=format:__COMMIT__%ct",
+            "--name-only",
+        )
+        seen_in_commit: set[str] = set()
+        for raw_line in raw_log.splitlines():
+            line = raw_line.strip()
+            if not line:
+                continue
+            if line.startswith("__COMMIT__"):
+                seen_in_commit.clear()
+                ts_str = line[len("__COMMIT__"):].strip()
+                commit_dt = datetime.fromtimestamp(int(ts_str), tz=timezone.utc)
+                if commit_dt < cutoff:
+                    break
+                continue
+            if line not in seen_in_commit:
+                seen_in_commit.add(line)
+                counts[line] = counts.get(line, 0) + 1
     except Exception:
         pass
 
@@ -224,7 +238,7 @@ def get_file_last_modified(
 ) -> dict[str, str]:
     """
     Returns { repo-relative path: ISO date string of last commit }.
-    Used for display purposes in the profile.
+    Uses a single `git log --name-only` pass for fast startup.
     """
     if not GIT_AVAILABLE:
         return {}
@@ -237,12 +251,80 @@ def get_file_last_modified(
     last_modified: dict[str, str] = {}
 
     try:
-        for commit in repo.iter_commits(max_count=max_commits):
-            dt = datetime.fromtimestamp(commit.committed_date).strftime("%Y-%m-%d")
-            for filepath in commit.stats.files:
-                if filepath not in last_modified:
-                    last_modified[filepath] = dt
+        raw_log = repo.git.log(
+            f"-n{max_commits}",
+            "--pretty=format:__COMMIT__%ct",
+            "--name-only",
+        )
+        current_dt = ""
+        for raw_line in raw_log.splitlines():
+            line = raw_line.strip()
+            if not line:
+                continue
+            if line.startswith("__COMMIT__"):
+                ts_str = line[len("__COMMIT__"):].strip()
+                current_dt = datetime.fromtimestamp(int(ts_str)).strftime("%Y-%m-%d")
+                continue
+            if current_dt and line not in last_modified:
+                last_modified[line] = current_dt
     except Exception:
         pass
 
     return last_modified
+
+
+def get_recent_commits_for_files(
+    repo_path: str,
+    file_paths: Iterable[str],
+    *,
+    max_commits: int = 200,
+    max_per_file: int = 3,
+) -> dict[str, list[dict[str, str]]]:
+    """
+    Returns { repo-relative path: [{"sha": ..., "author": ..., "date": ..., "message": ...}] }
+    for the requested `file_paths` using a single `git log` pass.
+    """
+    target_set = {p for p in file_paths if p}
+    if not GIT_AVAILABLE or not target_set:
+        return {}
+
+    try:
+        repo = Repo(repo_path)
+    except Exception:
+        return {}
+
+    commits_by_file: dict[str, list[dict[str, str]]] = {p: [] for p in target_set}
+    try:
+        raw_log = repo.git.log(
+            f"-n{max_commits}",
+            "--pretty=format:__COMMIT__%h|%an|%ad|%s",
+            "--date=short",
+            "--name-only",
+        )
+        current_meta: Optional[dict[str, str]] = None
+        seen_in_commit: set[str] = set()
+        for raw_line in raw_log.splitlines():
+            line = raw_line.strip()
+            if not line:
+                continue
+            if line.startswith("__COMMIT__"):
+                seen_in_commit.clear()
+                parts = line[len("__COMMIT__"):].split("|", 3)
+                if len(parts) == 4:
+                    current_meta = {
+                        "sha": parts[0].strip(),
+                        "author": parts[1].strip(),
+                        "date": parts[2].strip(),
+                        "message": parts[3].strip(),
+                    }
+                else:
+                    current_meta = None
+                continue
+            if current_meta is not None and line in target_set and line not in seen_in_commit:
+                seen_in_commit.add(line)
+                if len(commits_by_file[line]) < max_per_file:
+                    commits_by_file[line].append(dict(current_meta))
+    except Exception:
+        pass
+
+    return {k: v for k, v in commits_by_file.items() if v}

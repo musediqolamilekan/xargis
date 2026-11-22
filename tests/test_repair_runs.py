@@ -13,7 +13,14 @@ class TestRepairRuns(unittest.TestCase):
         context = RepairContext(
             incident=Incident("incident/one", "broken"),
             repository_path="/repo",
-            evidence=[RepairEvidence(path="app/service.py", score=100)],
+            evidence=[
+                RepairEvidence(
+                    path="app/service.py",
+                    score=100,
+                    patch_eligible=True,
+                    patch_eligibility_reason="eligible_valid_stack_frame",
+                )
+            ],
         )
         plan = PatchPlan(
             "Fix service",
@@ -30,7 +37,7 @@ class TestRepairRuns(unittest.TestCase):
             self.assertEqual("needs-review", run.status)
             self.assertTrue(run.path.endswith("incident-one"))
             self.assertEqual(
-                {"incident.json", "repair-context.json", "patch-plan.json", "patch.diff", "verification.json", "run.json"},
+                {"incident.json", "repair-context.json", "patch-plan.json", "patch.diff", "pull-request.md", "verification.json", "run.json"},
                 set(os.listdir(run.path)),
             )
             with open(os.path.join(run.path, "verification.json"), encoding="utf-8") as handle:

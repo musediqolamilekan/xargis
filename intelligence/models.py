@@ -182,6 +182,7 @@ class EcosystemContext:
     subpath_imports: dict[str, str] = field(default_factory=dict)     # package.json "#imports"
     python_path_aliases: dict[str, str] = field(default_factory=dict)  # poetry/pyproject paths
     detected_frameworks: list[str] = field(default_factory=list)      # ["laravel", "nextjs", "spring-boot"]
+    package_versions: dict[str, str] = field(default_factory=dict)    # {"django": "==5.0", "next": "14.0.0"}
 
     def to_dict(self) -> dict:
         return {
@@ -189,6 +190,7 @@ class EcosystemContext:
             "subpath_imports": dict(self.subpath_imports),
             "python_path_aliases": dict(self.python_path_aliases),
             "detected_frameworks": list(self.detected_frameworks),
+            "package_versions": dict(self.package_versions),
         }
 
 
@@ -203,11 +205,16 @@ class FileAnalysis:
     imports: list[str] = field(default_factory=list)
     interfaces: list[str] = field(default_factory=list)
     structs: list[str] = field(default_factory=list)
+    calls: list[str] = field(default_factory=list)
+    api_endpoints: list[str] = field(default_factory=list)
+    db_interactions: list[str] = field(default_factory=list)
+    service_calls: list[str] = field(default_factory=list)
+    config_keys: list[str] = field(default_factory=list)
     symbol_locations: list[SymbolLocation] = field(default_factory=list)
     parse_errors: list[dict] = field(default_factory=list)
     lexical_terms: dict[str, int] = field(default_factory=dict)
     analysis_tier: str = "unknown"
-    todos: list[str] = field(default_factory=list)
+    todos: list[dict] = field(default_factory=list)
     error: Optional[str] = None
 
 @dataclass

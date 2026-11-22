@@ -5,7 +5,12 @@ import unittest
 from git import Actor, Repo
 
 from intelligence.analyzer import get_parser, run_tags_query
-from intelligence.git_analyzer import analyze_deployment_diff
+from intelligence.git_analyzer import (
+    analyze_deployment_diff,
+    get_file_change_counts,
+    get_file_last_modified,
+    get_recent_commits_for_files,
+)
 from intelligence.models import SymbolLocation
 
 
@@ -64,6 +69,23 @@ class TestDeploymentDiff(unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, "must resolve to repository commits"):
             analyze_deployment_diff(self.temp_dir.name, "does-not-exist", stable.hexsha)
+
+    def test_single_pass_change_counts_and_last_modified_dates(self):
+        self.commit_file("def stable():\n    return 1\n", "first commit")
+        self.commit_file("def stable():\n    return 2\n", "second commit")
+
+        counts = get_file_change_counts(self.temp_dir.name, days=90)
+        last_mod = get_file_last_modified(self.temp_dir.name)
+
+        self.assertEqual(2, counts.get("app.py"))
+        self.assertIn("app.py", last_mod)
+        self.assertRegex(last_mod["app.py"], r"^\d{4}-\d{2}-\d{2}$")
+
+        recent_commits = get_recent_commits_for_files(self.temp_dir.name, ["app.py"])
+        self.assertIn("app.py", recent_commits)
+        self.assertEqual(2, len(recent_commits["app.py"]))
+        self.assertEqual("second commit", recent_commits["app.py"][0]["message"])
+        self.assertEqual("first commit", recent_commits["app.py"][1]["message"])
 
 
 if __name__ == "__main__":

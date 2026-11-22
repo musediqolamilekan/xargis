@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="980" height="980" viewBox="0 0 980 980">
+  <defs>
+    <style>
+      .bg { fill: #0d1117; rx: 12px; ry: 12px; stroke: #30363d; stroke-width: 1.5; }
+      .header { fill: #161b22; }
+      .title { font-family: "JetBrains Mono", "Fira Code", "SFMono-Regular", Consolas, monospace; font-size: 13px; fill: #8b949e; font-weight: 600; }
+      .code { font-family: "JetBrains Mono", "Fira Code", "SFMono-Regular", Consolas, monospace; font-size: 12.5px; fill: #e6edf3; white-space: pre; }
+      .cmd { font-family: "JetBrains Mono", "Fira Code", "SFMono-Regular", Consolas, monospace; font-size: 13px; fill: #58a6ff; font-weight: 700; white-space: pre; }
+      .accent { fill: #3fb950; font-weight: 700; }
+      .warn { fill: #d29922; font-weight: 700; }
+      .heading { fill: #79c0ff; font-weight: 700; }
+    </style>
+  </defs>
+  <rect class="bg" x="1" y="1" width="978" height="978" rx="12" ry="12"/>
+  <path class="header" d="M 13 2 H 967 A 11 11 0 0 1 978 13 V 40 H 2 V 13 A 11 11 0 0 1 13 2 Z"/>
+  <circle cx="22" cy="21" r="6" fill="#ff5f56"/>
+  <circle cx="42" cy="21" r="6" fill="#ffbd2e"/>
+  <circle cx="62" cy="21" r="6" fill="#27c93f"/>
+  <text class="title" x="490" y="25" text-anchor="middle">ASRE — Multi-Hop Cross-Incident Causal Discovery &amp; Counterfactual Attribution</text>
+  <text class="cmd" x="22" y="56" xml:space="preserve">$ python main.py --local .repo_cache/click --cross-incident examples/click-001/cross-incidents.json</text>
+  <text class="code" x="22" y="76" xml:space="preserve"></text>
+  <text class="code heading" x="22" y="96" xml:space="preserve">════════════════════════════════════════════════════════════════════</text>
+  <text class="code" x="22" y="116" xml:space="preserve">  🕸️   CROSS-INCIDENT INTELLIGENCE (HYBRID GRAPH-RAG + TEMPORAL CAUSAL)</text>
+  <text class="code heading" x="22" y="136" xml:space="preserve">════════════════════════════════════════════════════════════════════</text>
+  <text class="code" x="22" y="156" xml:space="preserve"></text>
+  <text class="code" x="22" y="176" xml:space="preserve">  Incidents Analyzed:            3</text>
+  <text class="code" x="22" y="196" xml:space="preserve">  Correlated Root-Cause Groups:  1</text>
+  <text class="code" x="22" y="216" xml:space="preserve">  Relationship Graph Topology:   154 nodes · 436 causal/dependency edges</text>
+  <text class="code" x="22" y="236" xml:space="preserve"></text>
+  <text class="code" x="22" y="256" xml:space="preserve">  🎯  COMMON ROOT-CAUSE GROUP [CORR-1] (3 INCIDENTS)</text>
+  <text class="code heading" x="22" y="276" xml:space="preserve">──────────────────────────────────────────────────────────────</text>
+  <text class="code" x="22" y="296" xml:space="preserve">  Common Root-Cause Module:    src/click/_utils.py  (PPR=0.0278 · Confidence=95%)</text>
+  <text class="code" x="22" y="316" xml:space="preserve">  Shared Infrastructure Cause: symbol:src/click/_winconsole.py:get_buffer</text>
+  <text class="code" x="22" y="336" xml:space="preserve">  Root Trigger Incident:       incident-C-core-batch-crash</text>
+  <text class="code" x="22" y="356" xml:space="preserve"></text>
+  <text class="code" x="22" y="376" xml:space="preserve">  Unified Root-Cause Hypothesis:</text>
+  <text class="code" x="22" y="396" xml:space="preserve">   All 3 incidents (incident-A-payment-timeout (payment-service:</text>
+  <text class="code" x="22" y="416" xml:space="preserve">   TimeoutError), incident-B-order-creation (order-service:</text>
+  <text class="code" x="22" y="436" xml:space="preserve">   RuntimeError), incident-C-core-batch-crash (core-batch-pool:</text>
+  <text class="code" x="22" y="456" xml:space="preserve">   AttributeError)) converge on a common underlying root cause in</text>
+  <text class="code" x="22" y="476" xml:space="preserve">   &#x27;src/click/_utils.py&#x27; and shared resource</text>
+  <text class="code" x="22" y="496" xml:space="preserve">   &#x27;symbol:src/click/_winconsole.py:get_buffer&#x27; (PPR=0.028),</text>
+  <text class="code" x="22" y="516" xml:space="preserve">   triggered first by &#x27;incident-C-core-batch-crash&#x27; and cascading</text>
+  <text class="code" x="22" y="536" xml:space="preserve">   upstream into core-batch-pool, order-service, payment-service.</text>
+  <text class="code" x="22" y="556" xml:space="preserve"></text>
+  <text class="code" x="22" y="576" xml:space="preserve">  Shared Dependencies: src/click/decorators.py, src/click/core.py, src/click/globals.py, src/click/utils.py, src</text>
+  <text class="code" x="22" y="596" xml:space="preserve"></text>
+  <text class="code" x="22" y="616" xml:space="preserve">  Correlated Incidents &amp; Drain3 Log Templates:</text>
+  <text class="code heading" x="22" y="636" xml:space="preserve">   ├── incident-C-core-batch-crash [core-batch-pool @ 2026-11-21T12:00:00Z] AttributeError: &#x27;tuple&#x27; object has n</text>
+  <text class="code" x="22" y="656" xml:space="preserve">   │    Drain Template [tpl-b12257bd]: AttributeError: &lt;*&gt; object has no attribute &lt;*&gt; in shared </text>
+  <text class="code heading" x="22" y="676" xml:space="preserve">   ├── incident-A-payment-timeout [payment-service @ 2026-11-21T12:00:08Z] TimeoutError: Payment gateway charge </text>
+  <text class="code" x="22" y="696" xml:space="preserve">   │    Drain Template [tpl-1664a5bb]: TimeoutError: Payment gateway charge request timed out aft</text>
+  <text class="code heading" x="22" y="716" xml:space="preserve">   ├── incident-B-order-creation [order-service @ 2026-11-21T12:00:03Z] RuntimeError: Order creation failed duri</text>
+  <text class="code" x="22" y="736" xml:space="preserve">   │    Drain Template [tpl-8aaf1660]: RuntimeError: Order creation failed during batch parameter</text>
+  <text class="code" x="22" y="756" xml:space="preserve"></text>
+  <text class="code" x="22" y="776" xml:space="preserve">  Multi-Hop Cross-Service Causal Propagation DAG (PC Transitive Reduction):</text>
+  <text class="code heading" x="22" y="796" xml:space="preserve">   ⚡ core-batch-pool (incident-C-core-batch-crash) ──▶ order-service (incident-B-order-creation) ──▶ payment-ser</text>
+  <text class="code heading" x="22" y="816" xml:space="preserve">   ⚡ order-service (incident-B-order-creation) ──▶ payment-service (incident-A-payment-timeout)</text>
+  <text class="code" x="22" y="836" xml:space="preserve"></text>
+  <text class="code" x="22" y="856" xml:space="preserve">  Counterfactual Do-Calculus Root-Cause Attribution (P(resolve | do(fix S))):</text>
+  <text class="code" x="22" y="876" xml:space="preserve">   100.0% cascade resolved by fixing core-batch-pool (incident-C-core-batch-crash) [affects 3 service(s) · Grang</text>
+  <text class="code" x="22" y="896" xml:space="preserve">    66.7% cascade resolved by fixing order-service (incident-B-order-creation) [affects 2 service(s) · Granger=0</text>
+  <text class="code" x="22" y="916" xml:space="preserve">    33.3% cascade resolved by fixing payment-service (incident-A-payment-timeout) [affects 1 service(s) · Grange</text>
+  <text class="code" x="22" y="936" xml:space="preserve">  ... (74 additional lines omitted for brevity)</text>
+</svg>

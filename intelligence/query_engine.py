@@ -125,15 +125,64 @@ def _tokenise(text: str) -> set[str]:
     return {p.lower() for p in parts if len(p) > 1}
 
 
-def _token_overlap(query_tokens: set[str], text: str) -> float:
+def _token_overlap(
+    query_tokens: set[str],
+    text: str,
+    token_weights: dict[str, float] | None = None,
+) -> tuple[float, float]:
     """
-    Returns the fraction of query tokens that appear in text's token set.
+    Returns (raw_fraction, idf_weighted_fraction) of query tokens that appear in text.
     """
     if not query_tokens:
-        return 0.0
+        return 0.0, 0.0
     text_tokens = _tokenise(text)
     common = query_tokens & text_tokens
-    return len(common) / len(query_tokens)
+    if not common:
+        return 0.0, 0.0
+    raw_overlap = len(common) / len(query_tokens)
+    if not token_weights:
+        return raw_overlap, raw_overlap
+    total_weight = sum(token_weights.get(t, 1.0) for t in query_tokens)
+    if total_weight <= 0:
+        return raw_overlap, raw_overlap
+    matched_weight = sum(token_weights.get(t, 1.0) for t in common)
+    return raw_overlap, matched_weight / total_weight
+
+
+def _compute_query_token_idfs(
+    profiles: dict[str, FileProfile],
+    query_tokens: set[str],
+) -> dict[str, float]:
+    """Compute smoothed BM25 IDF weights for query tokens across all file profiles."""
+    if not query_tokens or not profiles:
+        return {}
+    doc_count = len(profiles)
+    df: Counter[str] = Counter()
+    for path, profile in profiles.items():
+        file_tokens = _tokenise(path)
+        file_tokens.update(
+            _tokenise(
+                " ".join(
+                    profile.functions
+                    + profile.classes
+                    + profile.interfaces
+                    + profile.structs
+                )
+            )
+        )
+        lexical_terms = getattr(profile, "lexical_terms", None) or {}
+        if lexical_terms:
+            file_tokens.update(lexical_terms.keys())
+        for token in query_tokens & file_tokens:
+            df[token] += 1
+
+    return {
+        token: max(
+            0.1,
+            log(1.0 + (doc_count - df[token] + 0.5) / (df[token] + 0.5)),
+        )
+        for token in query_tokens
+    }
 
 
 def _substring_in(query_lower: str, candidates: list[str]) -> bool:
@@ -150,6 +199,8 @@ def query_codebase(
     """
     query_lower = query.lower().strip()
     query_tokens = _tokenise(query)
+    token_weights = _compute_query_token_idfs(profiles, query_tokens)
+    total_query_weight = sum(token_weights.get(t, 1.0) for t in query_tokens) or 1.0
 
     results: list[QueryMatch] = []
 
@@ -158,9 +209,9 @@ def query_codebase(
         relevance = 0.0
 
         # ── Signal 1: file path / name (highest weight) ──────────────
-        path_overlap = _token_overlap(query_tokens, path)
+        path_overlap, path_weighted = _token_overlap(query_tokens, path, token_weights)
         if path_overlap > 0:
-            bonus = 0.5 * path_overlap
+            bonus = 0.5 * path_weighted
             relevance += bonus
             reasons.append(f"File path matches ({path_overlap:.0%} of query terms)")
 
@@ -171,9 +222,9 @@ def query_codebase(
         # ── Signal 2: function / class names ──────────────────────────
         fn_texts = " ".join(profile.functions + profile.classes +
                             profile.interfaces + profile.structs)
-        sym_overlap = _token_overlap(query_tokens, fn_texts)
+        sym_overlap, sym_weighted = _token_overlap(query_tokens, fn_texts, token_weights)
         if sym_overlap > 0:
-            bonus = 0.35 * sym_overlap
+            bonus = 0.35 * sym_weighted
             relevance += bonus
             reasons.append(f"Symbols match ({sym_overlap:.0%} of query terms)")
 
@@ -195,10 +246,13 @@ def query_codebase(
                 common = query_tokens & term_tokens
                 if common:
                     overlap = len(common) / len(query_tokens)
+                    weighted_overlap = (
+                        sum(token_weights.get(t, 1.0) for t in common) / total_query_weight
+                    )
                     matched_occurrences = sum(lexical_terms[t] for t in common)
                     total_occurrences = sum(lexical_terms.values()) or 1
                     density = matched_occurrences / total_occurrences
-                    bonus = 0.45 * overlap + 0.15 * density
+                    bonus = 0.45 * weighted_overlap + 0.15 * density
                     relevance += bonus
                     reasons.append(
                         f"Lexical terms match ({overlap:.0%} of query terms)"

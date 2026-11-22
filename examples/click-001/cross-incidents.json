@@ -1,0 +1,47 @@
+{
+  "incidents": [
+    {
+      "incident_id": "incident-A-payment-timeout",
+      "exception_type": "TimeoutError",
+      "message": "Payment gateway charge request timed out after 5000ms while waiting for CLI batch context",
+      "stack_trace": "Traceback (most recent call last):\n  File \"src/click/decorators.py\", line 34, in new_func\n    return f(get_current_context(), *args, **kwargs)\n  File \"src/click/core.py\", line 146, in batch\n    return tb.iter_rows()",
+      "environment": {
+        "service": "payment-service",
+        "env": "production"
+      },
+      "metadata": {
+        "timestamp": "2026-11-21T12:00:08Z",
+        "trace_id": "trace-checkout-9941"
+      }
+    },
+    {
+      "incident_id": "incident-B-order-creation",
+      "exception_type": "RuntimeError",
+      "message": "Order creation failed during batch parameter serialization for order_id=88412",
+      "stack_trace": "Traceback (most recent call last):\n  File \"src/click/termui.py\", line 120, in prompt\n    return value\n  File \"src/click/core.py\", line 146, in batch\n    return tb.iter_rows()",
+      "environment": {
+        "service": "order-service",
+        "env": "production"
+      },
+      "metadata": {
+        "timestamp": "2026-11-21T12:00:03Z",
+        "trace_id": "trace-checkout-9941"
+      }
+    },
+    {
+      "incident_id": "incident-C-core-batch-crash",
+      "exception_type": "AttributeError",
+      "message": "'tuple' object has no attribute 'iter_rows' in shared batch helper",
+      "stack_trace": "Traceback (most recent call last):\n  File \"src/click/core.py\", line 146, in batch\n    return tb.iter_rows()",
+      "environment": {
+        "service": "core-batch-pool",
+        "env": "production"
+      },
+      "metadata": {
+        "timestamp": "2026-11-21T12:00:00Z",
+        "trace_id": "trace-checkout-9941"
+      }
+    }
+  ]
+}
+

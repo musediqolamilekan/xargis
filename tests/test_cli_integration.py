@@ -210,6 +210,33 @@ class TestCLIIntegration(unittest.TestCase):
         self.assertGreater(len(ranked), 0)
         self.assertEqual("errors.py", ranked[0].profile.basename)
 
+    def test_query_engine_idf_weights_rare_identifier_above_common_token(self):
+        mk = lambda name, fns: type(
+            "P",
+            (),
+            {
+                "basename": name,
+                "functions": fns,
+                "classes": [],
+                "interfaces": [],
+                "structs": [],
+                "imports": [],
+                "imported_by": [],
+                "todos": [],
+                "risk_score": 10,
+            },
+        )()
+        profiles = {
+            "pkg/common_a.py": mk("common_a.py", ["handle_error"]),
+            "pkg/common_b.py": mk("common_b.py", ["log_error"]),
+            "pkg/common_c.py": mk("common_c.py", ["format_error"]),
+            "pkg/psr4_resolver.py": mk("psr4_resolver.py", ["resolve_psr4_namespace"]),
+        }
+
+        ranked = query_codebase(profiles, "error psr4")
+        self.assertGreaterEqual(len(ranked), 2)
+        self.assertEqual("psr4_resolver.py", ranked[0].profile.basename)
+
     def test_cli_empty_query_is_ignored_but_whitespace_query_is_broad_match(self):
         with tempfile.TemporaryDirectory() as repo_root:
             repo = Path(repo_root)

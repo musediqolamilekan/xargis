@@ -16,10 +16,38 @@ from intelligence.dependency_graph import build_dependency_graph
 from intelligence.file_profile import build_file_profiles, get_profile
 from intelligence.query_engine import query_codebase
 from intelligence.git_analyzer import get_file_change_counts, get_file_last_modified
-from repair.incident_mapper import build_repair_context, load_incident
-from repair.patch_planner import load_patch_plan, validate_patch_plan
-from repair.patch_executor import execute_patch_plan
-from repair.repair_runs import save_repair_run
+from intelligence.reliability_intelligence import (
+    analyze_pre_deployment_risk,
+    build_reliability_intelligence_report,
+)
+from intelligence.slo_intelligence import build_slo_intelligence_report
+from intelligence.investor_verification import run_investor_verification_suite
+from repair import (
+    LLMPatchPlanner,
+    SUPPORTED_ENVIRONMENTS,
+    SUPPORTED_PROVIDERS,
+    SUPPORTED_ROLES,
+    analyze_cross_incident_intelligence,
+    apply_verified_patch,
+    build_and_query_knowledge_base,
+    build_repair_context,
+    correlate_and_prioritize_incidents,
+    create_repair_pull_request,
+    detect_incident_from_command,
+    evaluate_approval_policy,
+    execute_patch_plan,
+    is_emergency_stop_active,
+    load_incident,
+    load_incidents_from_inputs,
+    load_patch_plan,
+    load_telemetry_events,
+    plan_with_repair_loop,
+    promote_knowledge_base_record,
+    rollback_applied_patch,
+    save_repair_run,
+    set_emergency_stop,
+    validate_patch_plan,
+)
 from reporting.reporter import print_report
 from reporting.graph_reporter import (
     print_graph_overview,
@@ -31,6 +59,20 @@ from reporting.profile_reporter import (
     print_file_profile,
     print_query_results,
 )
+from reporting.repair_reporter import (
+    print_cross_incident_intelligence_report,
+    print_database_status_report,
+    print_incident_intelligence_report,
+    print_investor_verification_report,
+    print_knowledge_base_report,
+    print_pre_deployment_risk_report,
+    print_reliability_intelligence_report,
+    print_repair_report,
+    print_slo_intelligence_report,
+    print_training_export_report,
+    prompt_and_print_application,
+)
+from storage import SupabaseStorageEngine, apply_supabase_schema_migration
 
 
 def _needs_graph(args) -> bool:
@@ -44,9 +86,17 @@ def _needs_graph(args) -> bool:
         args.query,
         args.all_profiles,
         args.incident,
+        args.detect_command,
+        args.correlate_alerts,
+        args.cross_incident,
         args.patch_plan,
+        args.generate_patch_plan,
         args.verify_patch_plan,
         args.repair_run_dir,
+        args.reliability_report,
+        args.pre_deploy_check,
+        args.slo_report,
+        args.sync_db,
     ])
 
 
@@ -140,6 +190,22 @@ Examples:
         help="Load a normalized production incident JSON payload",
     )
     incident_group.add_argument(
+        "--detect-command",
+        metavar="CMD",
+        help="Stage 1 (Detect): Run a command/test against the repo and auto-capture any failure as an Incident",
+    )
+    incident_group.add_argument(
+        "--correlate-alerts",
+        metavar="FILE",
+        help="Ingest, deduplicate, correlate, and prioritize alerts/logs from Sentry, Datadog, New Relic, OTel, Prometheus, or log files",
+    )
+    incident_group.add_argument(
+        "--cross-incident",
+        nargs="+",
+        metavar="FILE",
+        help="Run 3-Layer Hybrid Graph-RAG + Temporal Causal Cross-Incident Intelligence across multiple incidents to find a shared root cause",
+    )
+    incident_group.add_argument(
         "--explain-context",
         action="store_true",
         help="Print deterministic repository evidence for --incident as JSON",
@@ -150,14 +216,166 @@ Examples:
         help="Validate a structured patch plan against the incident repair context",
     )
     incident_group.add_argument(
+        "--generate-patch-plan",
+        action="store_true",
+        help="Generate a validated patch plan from the incident repair context using an LLM",
+    )
+    incident_group.add_argument(
+        "--llm-provider",
+        choices=SUPPORTED_PROVIDERS,
+        default="auto",
+        help="LLM provider for --generate-patch-plan (default: auto, reads API keys from .env)",
+    )
+    incident_group.add_argument(
+        "--llm-model",
+        metavar="MODEL",
+        help="Override the default model name for --generate-patch-plan",
+    )
+    incident_group.add_argument(
+        "--max-attempts",
+        type=int,
+        default=2,
+        metavar="N",
+        help="Max generation + verification attempts for --generate-patch-plan (default: 2)",
+    )
+    incident_group.add_argument(
+        "--challenge",
+        metavar="TEXT",
+        help="Challenge ASRE's conclusion or provide a counter-hypothesis for deeper investigation",
+    )
+    incident_group.add_argument(
         "--verify-patch-plan",
         action="store_true",
         help="Apply a validated plan in a temporary Git worktree and run its allowlisted tests",
     )
     incident_group.add_argument(
+        "--apply",
+        action="store_true",
+        help="Apply a worktree-verified patch to the live repository (skips interactive [y/N] prompt)",
+    )
+    incident_group.add_argument(
+        "--create-pr",
+        action="store_true",
+        help="Create a dedicated repair branch, commit the verified patch with an RCA body, and prepare/open a PR",
+    )
+    incident_group.add_argument(
         "--repair-run-dir",
         metavar="DIR",
         help="Write auditable incident, context, plan, and verification artifacts under DIR",
+    )
+
+    # ── Enterprise Production Protection ───────────────────────────
+    guard_group = parser.add_argument_group("Production Protection")
+    guard_group.add_argument(
+        "--environment",
+        choices=SUPPORTED_ENVIRONMENTS,
+        default=None,
+        help="Target deployment environment policy (development, staging, production)",
+    )
+    guard_group.add_argument(
+        "--role",
+        choices=SUPPORTED_ROLES,
+        default="sre",
+        help="Operator RBAC role (viewer, developer, sre, admin; default: sre)",
+    )
+    guard_group.add_argument(
+        "--operator",
+        default=os.environ.get("USER", "cli-operator"),
+        metavar="NAME",
+        help="Operator identifier recorded in audit logs",
+    )
+    guard_group.add_argument(
+        "--approver",
+        default="",
+        metavar="NAME",
+        help="Explicit human approver sign-off for production, high-risk, auth, or DB migration changes",
+    )
+    guard_group.add_argument(
+        "--health-check",
+        metavar="CMD",
+        help="Post-apply deployment health check command; triggers automatic rollback on failure",
+    )
+    guard_group.add_argument(
+        "--rollback",
+        metavar="PATH",
+        help="Roll back a previously applied repair run directory or patch.diff file",
+    )
+    guard_group.add_argument(
+        "--emergency-stop",
+        choices=("enable", "disable", "status"),
+        help="Engage, clear, or check the repository emergency stop kill switch",
+    )
+
+    # ── Reliability Intelligence & Prevention (Section F) ──────────
+    rel_group = parser.add_argument_group("Reliability Intelligence & Prevention")
+    rel_group.add_argument(
+        "--reliability-report",
+        action="store_true",
+        help="Identify frequently failing components, recurring exceptions, post-repair recurrences, fragile dependencies, technical debt, and preventive actions",
+    )
+    rel_group.add_argument(
+        "--pre-deploy-check",
+        nargs="?",
+        const="HEAD~1..HEAD",
+        metavar="BASE..TARGET",
+        help="Detect risky changes before deployment by analyzing modified AST symbols, blast radius, and incident history (default: HEAD~1..HEAD)",
+    )
+    rel_group.add_argument(
+        "--investor-report",
+        action="store_true",
+        help="Execute live verification benchmarks across all 10 investor due-diligence criteria (multi-repo, MTTD/MTTR, safety matrix, ROI, moat)",
+    )
+    rel_group.add_argument(
+        "--knowledge-base",
+        nargs="?",
+        const="incident repair runbook",
+        metavar="QUERY",
+        help="Build and query the 3-Tier Repair Memory & Knowledge Base (Semantic Docs/CODEOWNERS, Episodic CBR Positive/Negative Cases, Procedural Bandit Playbooks)",
+    )
+    rel_group.add_argument(
+        "--promote-kb",
+        metavar="INCIDENT_ID",
+        help="Human-in-the-Loop Trust Promotion Gate: promote a stored repair record from 'unverified' to 'verified' (requires --approver)",
+    )
+    rel_group.add_argument(
+        "--slo-report",
+        action="store_true",
+        help="Execute 4-Pillar SLO & Error Budget Intelligence (MWMBR 14.4x/6x/1x burn alerts, AST code attribution, TTE forecast, release freeze governance)",
+    )
+    rel_group.add_argument(
+        "--slo-target",
+        type=float,
+        default=99.9,
+        metavar="PCT",
+        help="Target SLO availability percentage for --slo-report (default: 99.9)",
+    )
+    rel_group.add_argument(
+        "--slo-telemetry",
+        metavar="FILE",
+        help="Optional alert/telemetry JSON or log file to include in --slo-report burn-rate & code attribution",
+    )
+
+    # ── Database & ML Training Data (Supabase) ─────────────────────
+    db_group = parser.add_argument_group("Supabase Database & ML Training Store")
+    db_group.add_argument(
+        "--init-db",
+        action="store_true",
+        help="Apply storage/supabase_schema.sql migration (8 tables + 2 ML training views) to Supabase Postgres",
+    )
+    db_group.add_argument(
+        "--db-status",
+        action="store_true",
+        help="Check Supabase PostgREST connectivity, schema status, offline queue, and local mirror table counts",
+    )
+    db_group.add_argument(
+        "--sync-db",
+        action="store_true",
+        help="Sync repository intelligence, repair runs, knowledge base, and flush pending offline queue to Supabase",
+    )
+    db_group.add_argument(
+        "--export-training-data",
+        metavar="DIR",
+        help="Export LLM SFT, DPO preference pairs, Tabular JIT change-risk CSV/JSONL, and Causal Graph datasets to DIR",
     )
 
     # ── Output ─────────────────────────────────────────────────────
@@ -180,14 +398,32 @@ Examples:
 
     args = parser.parse_args()
 
-    if (args.explain_context or args.patch_plan or args.verify_patch_plan or args.repair_run_dir) and not args.incident:
-        parser.error("incident context options require --incident")
-    if args.verify_patch_plan and not args.patch_plan:
-        parser.error("--verify-patch-plan requires --patch-plan")
+    incident_sources = sum(bool(x) for x in (args.incident, args.detect_command, args.correlate_alerts, args.cross_incident))
+    if incident_sources > 1:
+        parser.error("--incident, --detect-command, --correlate-alerts, and --cross-incident are mutually exclusive")
+    if (
+        args.explain_context
+        or args.patch_plan
+        or args.generate_patch_plan
+        or args.verify_patch_plan
+        or args.repair_run_dir
+    ) and incident_sources == 0:
+        parser.error("incident context options require --incident, --detect-command, --correlate-alerts, or --cross-incident")
+    if args.patch_plan and args.generate_patch_plan:
+        parser.error("--patch-plan and --generate-patch-plan are mutually exclusive")
+    if args.verify_patch_plan and not (args.patch_plan or args.generate_patch_plan):
+        parser.error("--verify-patch-plan requires --patch-plan or --generate-patch-plan")
+    if (args.apply or args.create_pr) and not args.verify_patch_plan:
+        parser.error("--apply and --create-pr require --verify-patch-plan")
+    if args.role == "viewer" and (args.generate_patch_plan or args.verify_patch_plan or args.apply or args.create_pr):
+        parser.error("RBAC role 'viewer' is read-only and cannot generate, verify, or apply patches")
 
     if not args.repo and not args.local:
-        parser.print_help()
-        sys.exit(1)
+        if args.init_db or args.db_status or args.sync_db or args.export_training_data:
+            args.local = "."
+        else:
+            parser.print_help()
+            sys.exit(1)
 
     repo_path = None
     repo_url = ""
@@ -210,6 +446,101 @@ Examples:
         print(f"\n🌐 Target: {repo_url}")
         repo_path = clone_repository(repo_url, no_pull=args.no_pull)
         print(f"✅ Repository ready at: {repo_path}\n")
+
+    if args.emergency_stop:
+        if args.emergency_stop == "status":
+            active, reason = is_emergency_stop_active(repo_path)
+            print(json.dumps({"emergency_stop": {"active": active, "reason": reason}}, indent=2))
+        else:
+            state = set_emergency_stop(
+                repo_path,
+                args.emergency_stop == "enable",
+                actor=args.operator,
+            )
+            print(json.dumps({"emergency_stop": state}, indent=2))
+        return
+
+    db_store = SupabaseStorageEngine()
+    if args.init_db:
+        ok, msg = apply_supabase_schema_migration()
+        print(json.dumps({"supabase_schema_migration": {"success": ok, "message": msg}}, indent=2))
+        if not (args.db_status or args.sync_db or args.export_training_data):
+            return
+
+    if args.db_status:
+        status_rep = db_store.check_status()
+        if args.json:
+            print(json.dumps({"database_status": status_rep.to_dict()}, indent=2))
+        else:
+            print_database_status_report(status_rep)
+        if not (args.sync_db or args.export_training_data):
+            return
+
+    if args.export_training_data and not args.sync_db:
+        export_rep = db_store.export_training_datasets(
+            args.export_training_data,
+            repo_root=repo_path,
+            repair_run_dir=args.repair_run_dir or ".asre/runs",
+        )
+        if args.json:
+            print(json.dumps({"training_export": export_rep.to_dict()}, indent=2))
+        else:
+            print_training_export_report(export_rep)
+        return
+
+    if args.rollback:
+        rb_result = rollback_applied_patch(repo_path, args.rollback)
+        db_store.sync_historical_runs_and_audit_logs(
+            repo_path,
+            repair_run_dir=args.repair_run_dir or ".asre/runs",
+        )
+        print(json.dumps({"rollback": rb_result.to_dict()}, indent=2))
+        return
+
+    if args.investor_report:
+        inv_report = run_investor_verification_suite(
+            repo_path,
+            repair_run_dir=args.repair_run_dir or ".asre/runs",
+        )
+        if args.json:
+            print(json.dumps({"investor_verification": inv_report.to_dict()}, indent=2))
+        else:
+            print_investor_verification_report(inv_report)
+        return
+
+    if args.promote_kb:
+        try:
+            promoted = promote_knowledge_base_record(
+                args.repair_run_dir or ".asre/runs",
+                args.promote_kb,
+                approver=args.approver or args.operator,
+            )
+            kb_rep = build_and_query_knowledge_base(
+                repo_path,
+                repair_run_dir=args.repair_run_dir or ".asre/runs",
+            )
+            db_store.sync_knowledge_base(kb_rep, repo_path)
+            db_store.sync_historical_runs_and_audit_logs(
+                repo_path,
+                repair_run_dir=args.repair_run_dir or ".asre/runs",
+            )
+        except ValueError as exc:
+            parser.error(str(exc))
+        print(json.dumps({"knowledge_base_promotion": promoted}, indent=2))
+        return
+
+    if args.knowledge_base:
+        kb_report = build_and_query_knowledge_base(
+            repo_path,
+            query=args.knowledge_base,
+            repair_run_dir=args.repair_run_dir or ".asre/runs",
+        )
+        db_store.sync_knowledge_base(kb_report, repo_path)
+        if args.json:
+            print(json.dumps({"knowledge_base": kb_report.to_dict()}, indent=2))
+        else:
+            print_knowledge_base_report(kb_report)
+        return
 
     # ── Run intelligence scan ─────────────────────────────────────
     print("🧠 Running intelligence scan...\n")
@@ -237,6 +568,8 @@ Examples:
         profiles = build_file_profiles(graph, intel, file_changes, file_modified)
         print(f"   {len(profiles)} profiles computed\n")
 
+    db_store.sync_repository_scan(repo_path, intel, graph, profiles)
+
     # ── Standard output (no flags = full repo report) ─────────────
     if args.output or args.json:
         result = to_dict(intel)
@@ -260,7 +593,7 @@ Examples:
     else:
         print_report(intel)
 
-    if graph is None:
+    if graph is None or profiles is None:
         return
 
     all_nodes = graph.all_nodes()
@@ -337,17 +670,92 @@ Examples:
     patch_plan = None
     validation = None
     execution = None
-    if args.explain_context or args.patch_plan or args.verify_patch_plan or args.repair_run_dir:
+    application = None
+    policy_decision = None
+    loop_result = None
+    repair_run = None
+    if (
+        args.correlate_alerts
+        or args.cross_incident
+        or args.detect_command
+        or args.explain_context
+        or args.patch_plan
+        or args.generate_patch_plan
+        or args.verify_patch_plan
+        or args.repair_run_dir
+    ):
         try:
-            incident = load_incident(args.incident)
+            if args.cross_incident:
+                multi_incidents = load_incidents_from_inputs(args.cross_incident)
+                cross_report = analyze_cross_incident_intelligence(
+                    multi_incidents,
+                    graph,
+                    profiles,
+                    repo_path,
+                    repair_run_dir=args.repair_run_dir,
+                )
+                db_store.sync_cross_incident_report(cross_report, repo_path)
+                if args.json:
+                    print(json.dumps({"cross_incident_intelligence": cross_report.to_dict()}, indent=2, default=str))
+                else:
+                    print_cross_incident_intelligence_report(cross_report)
+                if cross_report.primary_merged_incident is None:
+                    return
+                incident = cross_report.primary_merged_incident
+            elif args.correlate_alerts:
+                raw_events = load_telemetry_events(args.correlate_alerts)
+                intel_report = correlate_and_prioritize_incidents(
+                    raw_events,
+                    graph,
+                    profiles,
+                    repo_path,
+                )
+                if args.json:
+                    print(json.dumps({"incident_intelligence": intel_report.to_dict()}, indent=2, default=str))
+                else:
+                    print_incident_intelligence_report(intel_report)
+                if intel_report.top_incident is None:
+                    return
+                incident = intel_report.top_incident
+            elif args.detect_command:
+                incident = detect_incident_from_command(repo_path, args.detect_command)
+            else:
+                incident = load_incident(args.incident)
         except ValueError as exc:
             parser.error(str(exc))
         repair_context = build_repair_context(incident, graph, profiles, repo_path)
+        db_store.sync_incident(
+            incident,
+            repo_path,
+            mapped_files=[ev.path for ev in repair_context.evidence if ev.patch_eligible],
+        )
 
-    if args.explain_context:
+    if args.explain_context and repair_context is not None:
         print(json.dumps(repair_context.to_dict(), indent=2, default=str))
 
-    if args.patch_plan:
+    if args.generate_patch_plan and repair_context is not None:
+        try:
+            planner = LLMPatchPlanner(
+                provider=args.llm_provider,
+                model=args.llm_model,
+            )
+            loop_result = plan_with_repair_loop(
+                planner,
+                repair_context,
+                verify=args.verify_patch_plan,
+                max_attempts=args.max_attempts,
+                repair_run_dir=args.repair_run_dir,
+                challenge=args.challenge,
+            )
+        except (ValueError, RuntimeError) as exc:
+            parser.error(str(exc))
+        patch_plan = loop_result.plan
+        validation = loop_result.validation
+        execution = loop_result.execution
+        if args.json:
+            print(json.dumps({"llm_repair": loop_result.to_dict()}, indent=2, default=str))
+
+    if args.patch_plan and repair_context is not None:
         try:
             patch_plan = load_patch_plan(args.patch_plan)
         except ValueError as exc:
@@ -361,7 +769,112 @@ Examples:
             execution = execute_patch_plan(patch_plan, repair_context)
             print(json.dumps({"execution": execution.to_dict()}, indent=2, default=str))
 
-    if args.repair_run_dir:
+    if repair_context is not None and patch_plan is not None:
+        policy_decision = evaluate_approval_policy(
+            patch_plan,
+            repair_context,
+            environment=args.environment,
+            role=args.role,
+            operator=args.operator,
+            explicit_human_approval=bool(args.approver.strip()),
+            approver=args.approver,
+        )
+
+    if args.generate_patch_plan and repair_context is not None and not args.json:
+        print_repair_report(
+            repair_context,
+            loop_result=loop_result,
+            plan=patch_plan,
+            validation=validation,
+            execution=execution,
+            policy_decision=policy_decision,
+        )
+
+    if (
+        repair_context is not None
+        and patch_plan is not None
+        and execution is not None
+        and execution.status == "verified"
+    ):
+        if args.json:
+            if args.create_pr:
+                application = create_repair_pull_request(patch_plan, repair_context, execution)
+                print(json.dumps({"application": application.to_dict()}, indent=2, default=str))
+            elif args.apply:
+                application = apply_verified_patch(
+                    patch_plan,
+                    repair_context,
+                    execution,
+                    policy_decision=policy_decision,
+                    health_check_command=args.health_check,
+                )
+                print(json.dumps({"application": application.to_dict()}, indent=2, default=str))
+        elif args.generate_patch_plan or args.apply or args.create_pr:
+            def _handle_challenge(challenge_text: str):
+                nonlocal loop_result, patch_plan, validation, execution, policy_decision
+                planner = LLMPatchPlanner(
+                    provider=args.llm_provider,
+                    model=args.llm_model,
+                )
+                loop_result = plan_with_repair_loop(
+                    planner,
+                    repair_context,
+                    verify=args.verify_patch_plan,
+                    max_attempts=args.max_attempts,
+                    repair_run_dir=args.repair_run_dir,
+                    challenge=challenge_text,
+                )
+                patch_plan = loop_result.plan
+                validation = loop_result.validation
+                execution = loop_result.execution
+                if patch_plan is not None:
+                    policy_decision = evaluate_approval_policy(
+                        patch_plan,
+                        repair_context,
+                        environment=args.environment,
+                        role=args.role,
+                        operator=args.operator,
+                        explicit_human_approval=bool(args.approver.strip()),
+                        approver=args.approver,
+                    )
+                print_repair_report(
+                    repair_context,
+                    loop_result=loop_result,
+                    plan=patch_plan,
+                    validation=validation,
+                    execution=execution,
+                    policy_decision=policy_decision,
+                )
+                if patch_plan is not None and execution is not None and execution.status == "verified":
+                    return prompt_and_print_application(
+                        repair_context,
+                        patch_plan,
+                        execution,
+                        auto_apply=False,
+                        create_pr=False,
+                        interactive=sys.stdin.isatty(),
+                        policy_decision=policy_decision,
+                        health_check_command=args.health_check,
+                        apply_fn=apply_verified_patch,
+                        pr_fn=create_repair_pull_request,
+                    )
+                return None
+
+            application = prompt_and_print_application(
+                repair_context,
+                patch_plan,
+                execution,
+                auto_apply=args.apply,
+                create_pr=args.create_pr,
+                interactive=sys.stdin.isatty(),
+                policy_decision=policy_decision,
+                health_check_command=args.health_check,
+                apply_fn=apply_verified_patch,
+                pr_fn=create_repair_pull_request,
+                challenge_fn=_handle_challenge if args.generate_patch_plan else None,
+            )
+
+    if args.repair_run_dir and repair_context is not None:
         try:
             repair_run = save_repair_run(
                 args.repair_run_dir,
@@ -369,10 +882,115 @@ Examples:
                 plan=patch_plan,
                 validation=validation,
                 execution=execution,
+                application=application,
+                policy_decision=policy_decision,
             )
         except OSError as exc:
             parser.error(f"failed to write repair run: {exc}")
-        print(json.dumps({"repair_run": repair_run.to_dict()}, indent=2, default=str))
+        db_store.sync_repair_run(
+            os.path.basename(repair_run.path),
+            repair_context,
+            status=repair_run.status,
+            kb_trust_status="verified" if (application and application.approved) else "unverified",
+            promoted_by=args.approver or "",
+            plan=patch_plan,
+            execution=execution,
+            application=application,
+            llm_provider=args.llm_provider,
+            llm_model=args.llm_model or "",
+        )
+        db_store.sync_historical_runs_and_audit_logs(
+            repo_path,
+            repair_run_dir=args.repair_run_dir,
+        )
+        if not args.generate_patch_plan or args.json:
+            print(json.dumps({"repair_run": repair_run.to_dict()}, indent=2, default=str))
+        else:
+            print(f"  💾 Audit artifacts saved to: {repair_run.path} (status: {repair_run.status})\n")
+
+    if args.reliability_report:
+        rel_report = build_reliability_intelligence_report(
+            repo_path,
+            graph,
+            profiles,
+            repair_run_dir=args.repair_run_dir or ".asre/runs",
+        )
+        if args.json:
+            print(json.dumps({"reliability_intelligence": rel_report.to_dict()}, indent=2, default=str))
+        else:
+            print_reliability_intelligence_report(rel_report)
+
+    if args.pre_deploy_check:
+        try:
+            deploy_report = analyze_pre_deployment_risk(
+                repo_path,
+                graph,
+                profiles,
+                rev_range=args.pre_deploy_check,
+                repair_run_dir=args.repair_run_dir or ".asre/runs",
+            )
+            db_store.sync_change_risk_report(deploy_report, repo_path)
+        except ValueError as exc:
+            parser.error(str(exc))
+        if args.json:
+            print(json.dumps({"pre_deployment_risk": deploy_report.to_dict()}, indent=2, default=str))
+        else:
+            print_pre_deployment_risk_report(deploy_report)
+
+    if args.slo_report:
+        try:
+            slo_rep = build_slo_intelligence_report(
+                repo_path,
+                graph,
+                profiles,
+                slo_target_pct=args.slo_target,
+                telemetry_path=args.slo_telemetry,
+                repair_run_dir=args.repair_run_dir or ".asre/runs",
+            )
+            db_store.sync_slo_report(slo_rep, repo_path)
+        except ValueError as exc:
+            parser.error(str(exc))
+        if args.json:
+            print(json.dumps({"slo_intelligence": slo_rep.to_dict()}, indent=2, default=str))
+        else:
+            print_slo_intelligence_report(slo_rep)
+
+    if args.sync_db:
+        repo_sync = db_store.sync_repository_scan(repo_path, intel, graph, profiles)
+        kb_rep = build_and_query_knowledge_base(
+            repo_path,
+            repair_run_dir=args.repair_run_dir or ".asre/runs",
+        )
+        kb_sync = db_store.sync_knowledge_base(kb_rep, repo_path)
+        hist_sync = db_store.sync_historical_runs_and_audit_logs(
+            repo_path,
+            repair_run_dir=args.repair_run_dir or ".asre/runs",
+        )
+        flushed = db_store.flush_pending_sync()
+        print(
+            json.dumps(
+                {
+                    "supabase_sync": {
+                        "repository": repo_sync.to_dict(),
+                        "knowledge_base": kb_sync.to_dict(),
+                        "repair_runs": hist_sync["repair_runs"],
+                        "audit_logs": hist_sync["audit_logs"],
+                        "pending_queue_flush": flushed,
+                    }
+                },
+                indent=2,
+            )
+        )
+        if args.export_training_data:
+            export_rep = db_store.export_training_datasets(
+                args.export_training_data,
+                repo_root=repo_path,
+                repair_run_dir=args.repair_run_dir or ".asre/runs",
+            )
+            if args.json:
+                print(json.dumps({"training_export": export_rep.to_dict()}, indent=2))
+            else:
+                print_training_export_report(export_rep)
 
 
 if __name__ == "__main__":

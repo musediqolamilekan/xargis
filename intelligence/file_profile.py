@@ -50,6 +50,11 @@ class FileProfile:
     classes: list[str]      = field(default_factory=list)
     interfaces: list[str]   = field(default_factory=list)
     structs: list[str]      = field(default_factory=list)
+    calls: list[str]        = field(default_factory=list)
+    api_endpoints: list[str] = field(default_factory=list)
+    db_interactions: list[str] = field(default_factory=list)
+    service_calls: list[str] = field(default_factory=list)
+    config_keys: list[str]  = field(default_factory=list)
     todos: list[dict]       = field(default_factory=list)
     analysis_tier: str      = "unknown"
     lexical_terms: dict[str, int] = field(default_factory=dict)
@@ -86,6 +91,11 @@ class FileProfile:
             "classes": self.classes,
             "interfaces": self.interfaces,
             "structs": self.structs,
+            "calls": self.calls,
+            "api_endpoints": self.api_endpoints,
+            "db_interactions": self.db_interactions,
+            "service_calls": self.service_calls,
+            "config_keys": self.config_keys,
             "todos": len(self.todos),
             "analysis_tier": self.analysis_tier,
             "lexical_terms": self.lexical_terms,
@@ -164,6 +174,11 @@ def build_file_profiles(
             classes=fa.classes if fa else [],
             interfaces=fa.interfaces if fa else [],
             structs=fa.structs if fa else [],
+            calls=fa.calls if fa else [],
+            api_endpoints=fa.api_endpoints if fa else [],
+            db_interactions=fa.db_interactions if fa else [],
+            service_calls=fa.service_calls if fa else [],
+            config_keys=fa.config_keys if fa else [],
             todos=fa.todos if fa else [],
             analysis_tier=fa.analysis_tier if fa else "unknown",
             lexical_terms=fa.lexical_terms if fa else {},

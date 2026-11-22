@@ -1,0 +1,90 @@
+[
+  {
+    "source": "sentry",
+    "event_id": "click-001",
+    "count": 260,
+    "environment": "production",
+    "level": "fatal",
+    "tags": {
+      "service": "cli-core",
+      "trace_id": "trace-click-batch-901"
+    },
+    "exception": {
+      "values": [
+        {
+          "type": "AssertionError",
+          "value": "batch([1, 2, 3, 4], 2) returned [(1, 1), (2, 2), (3, 3), (4, 4)] instead of [(1, 2), (3, 4)] because repeat() received the raw iterable instead of iter(iterable)",
+          "stacktrace": {
+            "frames": [
+              {
+                "filename": "tests/test_batch_regression.py",
+                "lineno": 7,
+                "function": "test_batch_splits_sequence_into_equal_tuples"
+              },
+              {
+                "filename": "src/click/core.py",
+                "lineno": 146,
+                "function": "batch"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "metadata": {
+      "verification_test": "python -m unittest tests/test_batch_regression.py"
+    }
+  },
+  {
+    "ddsource": "datadog",
+    "id": "dd-decorators-1",
+    "count": 140,
+    "attributes": {
+      "service": "command-dispatcher",
+      "env": "production",
+      "status": "error",
+      "trace_id": "trace-click-batch-901",
+      "error": {
+        "kind": "RuntimeError",
+        "message": "Downstream option batching produced duplicated tuples in command group",
+        "stack": "  File \"src/click/decorators.py\", line 120, in command"
+      }
+    }
+  },
+  {
+    "source": "opentelemetry",
+    "traceId": "trace-click-batch-901",
+    "spanId": "span-click-77",
+    "count": 65,
+    "resource": {
+      "attributes": {
+        "service.name": "cli-runner",
+        "deployment.environment": "production"
+      }
+    },
+    "attributes": {
+      "exception.type": "TypeError",
+      "exception.message": "Invalid batched parameter tuple structure in core.batch",
+      "exception.stacktrace": "  File \"src/click/testing.py\", line 85, in invoke"
+    }
+  },
+  {
+    "alerts": [
+      {
+        "fingerprint": "prom-click-error-burst",
+        "count": 35,
+        "labels": {
+          "alertname": "CLIBatchFailureSpike",
+          "service": "cli-core",
+          "severity": "critical",
+          "file": "src/click/core.py",
+          "line": "146"
+        },
+        "annotations": {
+          "summary": "High failure rate in src/click/core.py batch() > 40% over 5m"
+        }
+      }
+    ]
+  }
+]
+

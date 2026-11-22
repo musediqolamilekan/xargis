@@ -9,7 +9,14 @@ class TestPatchPlanner(unittest.TestCase):
         self.context = RepairContext(
             incident=Incident("inc-1", "broken"),
             repository_path="/repo",
-            evidence=[RepairEvidence(path="app/service.py", score=100)],
+            evidence=[
+                RepairEvidence(
+                    path="app/service.py",
+                    score=100,
+                    patch_eligible=True,
+                    patch_eligibility_reason="eligible_valid_stack_frame",
+                )
+            ],
         )
         self.diff = "--- a/app/service.py\n+++ b/app/service.py\n@@ -1 +1 @@\n-old\n+new\n"
 
@@ -17,6 +24,83 @@ class TestPatchPlanner(unittest.TestCase):
         plan = PatchPlan("Fix service failure", ("app/service.py",), self.diff, ("python -m unittest tests.test_service",), 0.9)
         validation = validate_patch_plan(plan, self.context)
         self.assertTrue(validation.valid, validation.errors)
+
+    def test_plan_rejects_ineligible_evidence_file(self):
+        context = RepairContext(
+            incident=Incident("inc-1", "broken"),
+            repository_path="/repo",
+            evidence=[
+                RepairEvidence(
+                    path="app/service.py",
+                    score=20,
+                    patch_eligible=False,
+                    patch_eligibility_reason="ineligible_query_match_only",
+                )
+            ],
+        )
+        plan = PatchPlan("Fix query-only match", ("app/service.py",), self.diff, ("python -m unittest tests.test_service",), 0.9)
+        validation = validate_patch_plan(plan, context)
+        self.assertFalse(validation.valid)
+        self.assertTrue(any("not patch-eligible (ineligible_query_match_only)" in error for error in validation.errors))
+
+    def test_plan_rejects_overconfident_explanation_without_confirmed_evidence(self):
+        # Corroborated neighbor is patch-eligible, but has no confirmed stack frame evidence
+        context = RepairContext(
+            incident=Incident("inc-1", "broken"),
+            repository_path="/repo",
+            evidence=[
+                RepairEvidence(
+                    path="app/service.py",
+                    score=30,
+                    patch_eligible=True,
+                    patch_eligibility_reason="eligible_direct_graph_neighbor",
+                    evidence_tier="corroborated",
+                )
+            ],
+        )
+        overconfident_plan = PatchPlan(
+            "Guessing neighbor caused crash",
+            ("app/service.py",),
+            self.diff,
+            ("python -m unittest tests.test_service",),
+            0.85,
+        )
+        validation = validate_patch_plan(overconfident_plan, context)
+        self.assertFalse(validation.valid)
+        self.assertTrue(any("confirmed supporting evidence" in error for error in validation.errors))
+
+        # Cautious confidence (<= 0.5) on corroborated-only evidence is accepted
+        cautious_plan = PatchPlan(
+            "Suspected neighbor hypothesis",
+            ("app/service.py",),
+            self.diff,
+            ("python -m unittest tests.test_service",),
+            0.45,
+            suspected_cause="Downstream helper may return None",
+        )
+        cautious_validation = validate_patch_plan(cautious_plan, context)
+        self.assertTrue(cautious_validation.valid, cautious_validation.errors)
+
+    def test_plan_rejects_diff_introducing_security_vulnerabilities(self):
+        unsafe_diff = (
+            "--- a/app/service.py\n"
+            "+++ b/app/service.py\n"
+            "@@ -1 +1,2 @@\n"
+            "-old\n"
+            "+result = eval(user_input)\n"
+            "+subprocess.run(cmd, shell=True)\n"
+        )
+        plan = PatchPlan(
+            "Unsafe fix using eval",
+            ("app/service.py",),
+            unsafe_diff,
+            ("python -m unittest tests.test_service",),
+            0.9,
+        )
+        validation = validate_patch_plan(plan, self.context)
+        self.assertFalse(validation.valid)
+        self.assertTrue(any("security check failed in diff: arbitrary code execution" in e for e in validation.errors))
+        self.assertTrue(any("security check failed in diff: shell injection risk" in e for e in validation.errors))
 
     def test_plan_rejects_files_outside_context_and_unsafe_commands(self):
         plan = PatchPlan(

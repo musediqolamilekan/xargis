@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="980" height="1020" viewBox="0 0 980 1020">
+  <defs>
+    <style>
+      .bg { fill: #0d1117; rx: 12px; ry: 12px; stroke: #30363d; stroke-width: 1.5; }
+      .header { fill: #161b22; }
+      .title { font-family: "JetBrains Mono", "Fira Code", "SFMono-Regular", Consolas, monospace; font-size: 13px; fill: #8b949e; font-weight: 600; }
+      .code { font-family: "JetBrains Mono", "Fira Code", "SFMono-Regular", Consolas, monospace; font-size: 12.5px; fill: #e6edf3; white-space: pre; }
+      .cmd { font-family: "JetBrains Mono", "Fira Code", "SFMono-Regular", Consolas, monospace; font-size: 13px; fill: #58a6ff; font-weight: 700; white-space: pre; }
+      .accent { fill: #3fb950; font-weight: 700; }
+      .warn { fill: #d29922; font-weight: 700; }
+      .heading { fill: #79c0ff; font-weight: 700; }
+    </style>
+  </defs>
+  <rect class="bg" x="1" y="1" width="978" height="1018" rx="12" ry="12"/>
+  <path class="header" d="M 13 2 H 967 A 11 11 0 0 1 978 13 V 40 H 2 V 13 A 11 11 0 0 1 13 2 Z"/>
+  <circle cx="22" cy="21" r="6" fill="#ff5f56"/>
+  <circle cx="42" cy="21" r="6" fill="#ffbd2e"/>
+  <circle cx="62" cy="21" r="6" fill="#27c93f"/>
+  <text class="title" x="490" y="25" text-anchor="middle">ASRE — 3-Signal Pre-Deployment Change Risk, Platt Probability &amp; SHAP Attribution</text>
+  <text class="cmd" x="22" y="56" xml:space="preserve">$ python main.py --local .repo_cache/click --pre-deploy-check HEAD~1..HEAD</text>
+  <text class="code" x="22" y="76" xml:space="preserve"></text>
+  <text class="code heading" x="22" y="96" xml:space="preserve">══════════════════════════════════════════════════════════════════</text>
+  <text class="code" x="22" y="116" xml:space="preserve">  🚦  PREDICTIVE CHANGE RISK ANALYSIS (3-SIGNAL + SHAP + GOVERNANCE)</text>
+  <text class="code heading" x="22" y="136" xml:space="preserve">══════════════════════════════════════════════════════════════════</text>
+  <text class="code" x="22" y="156" xml:space="preserve"></text>
+  <text class="code" x="22" y="176" xml:space="preserve">  Commit Range:                  06b2a678..ebcf8d69</text>
+  <text class="code" x="22" y="196" xml:space="preserve">  Calibrated Incident Prob:      1.00 (99.9%)  [Platt-Scaled Log-Odds]</text>
+  <text class="code warn" x="22" y="216" xml:space="preserve">  Deployment Risk Verdict:       CRITICAL (100.0/100)</text>
+  <text class="code" x="22" y="236" xml:space="preserve">  Autonomous Governance Action:  BLOCK_AUTO_DEPLOY_REQUIRE_SENIOR_SRE_SIGN_OFF</text>
+  <text class="code" x="22" y="256" xml:space="preserve">  Orchestrator Directive:        Block auto-deploy, post SHAP risk breakdown &amp; historical incident citations to </text>
+  <text class="code" x="22" y="276" xml:space="preserve"></text>
+  <text class="code" x="22" y="296" xml:space="preserve">  📊  SHAP ADDITIVE RISK ATTRIBUTIONS (EXPLAINABILITY)</text>
+  <text class="code heading" x="22" y="316" xml:space="preserve">──────────────────────────────────────────────────────────────</text>
+  <text class="code" x="22" y="336" xml:space="preserve">  + 25.8%  [Signal 2: Graph Blast Radius]</text>
+  <text class="code" x="22" y="356" xml:space="preserve">           +25.8% risk: Touches high-centrality module &#x27;src/click/core.py&#x27; (risk 90/90, PageRank=0.079, 81 downs</text>
+  <text class="code" x="22" y="376" xml:space="preserve">  + 21.5%  [Signal 3: Semantic AST &amp; Memory]</text>
+  <text class="code" x="22" y="396" xml:space="preserve">           +21.5% risk: Modifies module(s) linked to 4 prior production incident(s) (src/click/core.py, tests/te</text>
+  <text class="code" x="22" y="416" xml:space="preserve">  + 17.7%  [Signal 1: Structural &amp; Historical]</text>
+  <text class="code" x="22" y="436" xml:space="preserve">           +17.7% risk: Churn +12/-1 across 2 file(s) (entropy=0.62, author familiarity=7%, recent bugfixes=4)</text>
+  <text class="code" x="22" y="456" xml:space="preserve">  + 13.8%  [Signal 3: Semantic AST &amp; Memory]</text>
+  <text class="code" x="22" y="476" xml:space="preserve">           +13.8% risk: Semantic diff inspection flagged AST symbols [src/click/core.py:batch, tests/test_batch_</text>
+  <text class="code" x="22" y="496" xml:space="preserve">  + 12.8%  [Signal 1: Structural &amp; Historical]</text>
+  <text class="code" x="22" y="516" xml:space="preserve">           +12.8% risk: Operational context risk: Weekend deploy window (Sat 09:25 UTC); 2 active/unresolved inc</text>
+  <text class="code" x="22" y="536" xml:space="preserve"></text>
+  <text class="code" x="22" y="556" xml:space="preserve">  📈  SIGNAL 1 — STRUCTURAL &amp; HISTORICAL METADATA (JIT TABULAR)</text>
+  <text class="code heading" x="22" y="576" xml:space="preserve">──────────────────────────────────────────────────────────────</text>
+  <text class="code" x="22" y="596" xml:space="preserve">  Code Churn &amp; Diffusion:      +12 / -1 lines across 2 file(s), 2 subsystem(s) (Shannon entropy=0.62)</text>
+  <text class="code" x="22" y="616" xml:space="preserve">  Author &amp; File History:       ASRE Demo (7% familiarity · 4 recent bugfix/revert commits)</text>
+  <text class="code" x="22" y="636" xml:space="preserve">  Deploy Timing Context:       Weekend deploy window (Sat 09:25 UTC)</text>
+  <text class="code" x="22" y="656" xml:space="preserve">  Imbalance &amp; Calibration:     Pos-class weight w+=5.3× · Historical PR-AUC=0.500</text>
+  <text class="code" x="22" y="676" xml:space="preserve"></text>
+  <text class="code" x="22" y="696" xml:space="preserve">  🕸️  SIGNAL 2 — BLAST RADIUS &amp; DEPENDENCY GRAPH CENTRALITY</text>
+  <text class="code heading" x="22" y="716" xml:space="preserve">──────────────────────────────────────────────────────────────</text>
+  <text class="code" x="22" y="736" xml:space="preserve">  Max Reverse PageRank:        0.0791  (Brandes Betweenness Centrality=0.0070)</text>
+  <text class="code" x="22" y="756" xml:space="preserve">  Downstream Consumers:        13 direct / 81 transitive dependents</text>
+  <text class="code" x="22" y="776" xml:space="preserve">  Degraded Dependencies:       src/click/core.py, tests/test_batch_regression.py</text>
+  <text class="code" x="22" y="796" xml:space="preserve"></text>
+  <text class="code" x="22" y="816" xml:space="preserve">  🧠  SIGNAL 3 — SEMANTIC AST DIFF &amp; CROSS-INCIDENT MEMORY</text>
+  <text class="code heading" x="22" y="836" xml:space="preserve">──────────────────────────────────────────────────────────────</text>
+  <text class="code" x="22" y="856" xml:space="preserve">  Modified AST Symbols:        src/click/core.py:batch, tests/test_batch_regression.py:TestBatchRegression, test</text>
+  <text class="code" x="22" y="876" xml:space="preserve">  AST / Diff Hazards Detected:</text>
+  <text class="code" x="22" y="896" xml:space="preserve">   ⚠ Boolean flag or condition value modified in &#x27;src/click/core.py&#x27;</text>
+  <text class="code" x="22" y="916" xml:space="preserve">   ⚠ Modified 3 AST symbol(s) (src/click/core.py:batch, tests/test_batch_regression.py:TestBatchRegression, test</text>
+  <text class="code" x="22" y="936" xml:space="preserve">  Cross-Incident Memory Citations:</text>
+  <text class="code" x="22" y="956" xml:space="preserve">   ↳ Last time `src/click/core.py` (modified symbol `batch`) failed, it caused Incident `click-001` (`TypeError:</text>
+  <text class="code" x="22" y="976" xml:space="preserve">  ... (26 additional lines omitted for brevity)</text>
+</svg>

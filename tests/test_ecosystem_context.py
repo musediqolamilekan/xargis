@@ -67,6 +67,35 @@ class TestEcosystemContext(unittest.TestCase):
             self.assertIn("django", context.detected_frameworks)
             self.assertIn("fastapi", context.detected_frameworks)
             self.assertIn("go", context.detected_frameworks)
+            self.assertEqual("==5.0", context.package_versions["django"])
+            self.assertEqual("==0.110.0", context.package_versions["fastapi"])
+
+    def test_deep_code_intelligence_extracts_calls_apis_db_services_and_config_keys(self):
+        with tempfile.TemporaryDirectory() as repo_root:
+            app_file = os.path.join(repo_root, "service.py")
+            with open(app_file, "w", encoding="utf-8") as handle:
+                handle.write(
+                    "import os\n"
+                    "import requests\n\n"
+                    "@app.post('/api/v1/orders')\n"
+                    "def create_order(db, user_id):\n"
+                    "    api_key = os.environ.get('STRIPE_API_KEY')\n"
+                    "    timeout = os.getenv('PAYMENT_TIMEOUT')\n"
+                    "    db.execute('SELECT id, balance FROM accounts WHERE user_id = :uid')\n"
+                    "    Order.objects.create(user_id=user_id)\n"
+                    "    resp = requests.post('https://api.stripe.com/v1/charges')\n"
+                    "    return format_order(resp)\n"
+                )
+            intel = scan_repository(repo_root, verbose=False)
+            self.assertEqual(1, len(intel.file_analyses))
+            fa = intel.file_analyses[0]
+            self.assertIn("POST /api/v1/orders", fa.api_endpoints)
+            self.assertTrue(any("SELECT id, balance FROM accounts" in item for item in fa.db_interactions))
+            self.assertIn("Order.objects.create", fa.db_interactions)
+            self.assertIn("requests.post", fa.service_calls)
+            self.assertIn("STRIPE_API_KEY", fa.config_keys)
+            self.assertIn("PAYMENT_TIMEOUT", fa.config_keys)
+            self.assertIn("format_order", fa.calls)
 
     def test_php_psr4_resolves_only_existing_files(self):
         context = EcosystemContext(psr4_mappings={"App\\": "app/"})

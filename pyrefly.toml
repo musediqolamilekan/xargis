@@ -1,0 +1,6 @@
+search-path = ["."]
+site-package-path = ["venv/lib/python3.12/site-packages"]
+python-version = "3.12"
+python-interpreter-path = "venv/bin/python"
+project-excludes = [".repo_cache", ".asre", "venv", ".venv"]
+
