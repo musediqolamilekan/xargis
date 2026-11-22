@@ -6,8 +6,9 @@ from __future__ import annotations
 
 from dataclasses import replace
 import textwrap
-from typing import Optional
+from typing import Any, Optional
 
+from intelligence.commercial_enterprise import CommercialEnterpriseReport
 from intelligence.investor_verification import InvestorVerificationReport
 from intelligence.reliability_intelligence import (
     PreDeploymentRiskReport,
@@ -1158,7 +1159,7 @@ def print_database_status_report(report: DatabaseStatusReport) -> None:
 def print_training_export_report(report: TrainingExportReport) -> None:
     """Renders the ML & LLM Training Dataset Export report."""
     print(f"\n{BOLD}{'═' * 68}{RESET}")
-    print(f"{BOLD}{CYAN}  🧬  ASRE ML & LLM TRAINING DATASET EXPORT{RESET}")
+    print(f"{BOLD}{CYAN}  🧬  XARGIS ML & LLM TRAINING DATASET EXPORT{RESET}")
     print(f"{BOLD}{'═' * 68}{RESET}")
 
     print(f"\n  {'Output Directory:':<34} {BOLD}{WHITE}{report.output_dir}{RESET}")
@@ -1172,6 +1173,106 @@ def print_training_export_report(report: TrainingExportReport) -> None:
         print(f"  {GREEN}✓{RESET} {WHITE}{f_path}{RESET}")
 
     print(f"\n{BOLD}{'═' * 68}{RESET}\n")
+
+
+def print_commercial_enterprise_report(report: CommercialEnterpriseReport) -> None:
+    """Renders the 10-Capability Commercial Enterprise & Product Differentiation Report."""
+    print(f"\n{BOLD}{'═' * 68}{RESET}")
+    print(f"{BOLD}{CYAN}  🏢  XARGIS COMMERCIAL ENTERPRISE & PRODUCT CAPABILITIES REPORT{RESET}")
+    print(f"{BOLD}{'═' * 68}{RESET}")
+
+    # 1. Multi-Repository Federated Intelligence
+    fed = report.multi_repo_federation
+    _section("1. MULTI-REPOSITORY FEDERATED INTELLIGENCE", "🌐")
+    print(f"  {'Repositories Indexed:':<30} {BOLD}{WHITE}{fed.repositories_analyzed}{RESET}")
+    print(f"  {'Shared Ecosystem Packages:':<30} {CYAN}{', '.join(fed.shared_dependencies) or 'None'}{RESET}")
+    for node in fed.nodes:
+        print(
+            f"  {CYAN}•{RESET} {BOLD}{WHITE}{node.repo_id:<16}{RESET} "
+            f"({node.total_files} files, {node.total_lines:,} LOC, {node.dependency_edges} edges) · "
+            f"Top Hotspot: {YELLOW}{node.top_hotspot_file}{RESET} ({node.top_hotspot_risk}/90)"
+        )
+
+    # 2. Service Ownership Mapping
+    own = report.service_ownership
+    _section("2. SERVICE OWNERSHIP MAPPING (CODEOWNERS + GIT-BLAME FALLBACK)", "👥")
+    co_str = f"{GREEN}Active ({own.codeowners_rules_count} rules){RESET}" if own.has_codeowners_file else f"{YELLOW}Auto-Resolved via 90d Git Commit History{RESET}"
+    print(f"  {'Ownership Resolution Source:':<30} {co_str}")
+    for sub in own.subsystems[:6]:
+        bf_badge = f" {YELLOW}[Bus-Factor Risk]{RESET}" if sub.bus_factor_warning else ""
+        print(
+            f"  {CYAN}•{RESET} {WHITE}{sub.subsystem:<18}{RESET} → {BOLD}{GREEN}{sub.team_handle:<22}{RESET} "
+            f"Primary: {WHITE}{sub.primary_owner[:28]}{RESET} ({sub.primary_owner_share_pct:.0f}%){bf_badge}"
+        )
+
+    # 3. Incident Cost Estimation & Autonomous ROI
+    cost = report.incident_cost_estimation
+    _section("3. INCIDENT COST ESTIMATION & AUTONOMOUS ROI", "💰")
+    print(f"  {'Manual Baseline MTTR:':<30} {YELLOW}{cost.human_baseline_mttr_minutes:.1f} min{RESET} (vs ASRE Autonomous: {GREEN}{cost.asre_autonomous_mttr_seconds:.1f}s{RESET} — {BOLD}{CYAN}{cost.mttr_speedup_factor:.0f}x faster{RESET})")
+    print(f"  {'Manual War-Room + SLA Cost:':<30} {RED}${cost.manual_engineering_cost_usd + cost.manual_business_impact_usd:,.2f}{RESET} ({cost.incidents_evaluated} incident(s))")
+    print(f"  {'ASRE Assisted Total Cost:':<30} {GREEN}${cost.asre_assisted_total_cost_usd:,.2f}{RESET}")
+    print(f"  {'Net Savings & Hours Saved:':<30} {BOLD}{GREEN}${cost.net_savings_usd:,.2f} saved{RESET} ({cost.engineering_hours_saved:.1f} SRE hours recovered)")
+
+    # 4. Repair Effectiveness Analytics
+    eff = report.repair_effectiveness
+    _section("4. REPAIR EFFECTIVENESS ANALYTICS", "📈")
+    print(f"  {'Total Repair Runs Analyzed:':<30} {WHITE}{eff.total_repair_runs}{RESET} ({GREEN}{eff.positive_verified_runs} verified{RESET}, {YELLOW}{eff.negative_blocked_or_failed_runs} negative guardrails{RESET})")
+    print(f"  {'Recurrence-Free Survival:':<30} {BOLD}{GREEN}{eff.recurrence_free_survival_rate_pct:.1f}%{RESET} (Human-Promoted Verified: {eff.human_promoted_verified_count})")
+    print(f"  {'Dead-End Actions Prevented:':<30} {CYAN}{eff.dead_end_actions_prevented}{RESET} · Mean Verified MTTR: {GREEN}{eff.mean_mttr_seconds:.1f}s{RESET}")
+
+    # 5. Engineering Reliability Scorecards
+    sc = report.reliability_scorecard
+    _section("5. ENGINEERING RELIABILITY SCORECARD", "🏆")
+    grade_col = GREEN if sc.overall_score >= 80 else (YELLOW if sc.overall_score >= 65 else RED)
+    print(f"  {'Composite Reliability Score:':<30} {BOLD}{grade_col}{sc.overall_score:.1f}/100 (Grade: {sc.letter_grade}){RESET}")
+    print(
+        f"  {'Dimension Breakdown:':<30} Arch={sc.architecture_health_score:.0f} · "
+        f"ChangeSafety={sc.change_safety_score:.0f} · Repair={sc.repair_effectiveness_score:.0f} · "
+        f"SLO={sc.slo_budget_health_score:.0f} · DebtHygiene={sc.tech_debt_hygiene_score:.0f}"
+    )
+    for sub_sc in sc.subsystem_scorecards[:5]:
+        print(
+            f"  {CYAN}•{RESET} {WHITE}{sub_sc.subsystem:<18}{RESET} [{BOLD}{sub_sc.grade:<2}{RESET} {sub_sc.score:.1f}/100] "
+            f"Owner: {GREEN}{sub_sc.owner_team:<22}{RESET} (High-Risk Files: {sub_sc.high_risk_files})"
+        )
+
+    # 6. Custom Declarative Repair Policies
+    pol = report.custom_repair_policy
+    verd = report.sample_policy_verdict
+    _section("6. CUSTOM DECLARATIVE REPAIR POLICIES (.asre/policy.json)", "🛡️")
+    print(f"  {'Policy Configuration:':<30} {WHITE}{pol.policy_source}{RESET}")
+    print(f"  {'Patch Scope Limits:':<30} max_files={pol.max_files_per_patch}, max_lines={pol.max_changed_lines}, protected_globs={len(pol.protected_path_globs)}")
+    v_badge = f"{GREEN}ALLOWED{RESET}" if verd.allowed_for_autonomous_modification else f"{YELLOW}GATED ({'; '.join(verd.violations[:1])}){RESET}"
+    print(f"  {'Hotspot Policy Check:':<30} {v_badge}")
+
+    # 7 & 8. Team Knowledge Sharing & Private Deployment
+    tkb = report.team_knowledge_sharing
+    prv = report.private_deployment
+    _section("7 & 8. TEAM KNOWLEDGE SHARING & PRIVATE DEPLOYMENT COMPLIANCE", "🔒")
+    print(
+        f"  {'Shared Knowledge Catalog:':<30} {GREEN}{tkb.shared_verified_repairs_count} verified repair(s){RESET}, "
+        f"{CYAN}{tkb.reusable_ast_playbooks_count} AST playbook(s){RESET}, {tkb.tier1_runbook_sections_indexed} runbook section(s)"
+    )
+    priv_badge = f"{GREEN}ACTIVE (Strict Zero-Egress Air-Gapped Mode){RESET}" if prv.private_mode_active else f"{CYAN}Ready (Use --private-mode for Zero-Egress Enforcement){RESET}"
+    print(f"  {'Private Deployment Mode:':<30} {priv_badge}")
+    print(f"  {'Compliance Attestation:':<30} SHA-256 `{prv.compliance_attestation_sha256}` (Worktree Isolation + Secret Redaction)")
+
+    # 9. Multi-Environment Governance Matrix
+    _section("9. MULTI-ENVIRONMENT GOVERNANCE MATRIX (DEV / STAGING / PROD)", "🌍")
+    for tier in report.multi_environment_matrix:
+        print(
+            f"  {CYAN}•{RESET} {BOLD}{WHITE}{tier.environment:<13}{RESET} "
+            f"MaxAutoRisk={tier.max_auto_apply_risk_score}/90 · R_action≤{tier.max_auto_deploy_r_action:.2f} · "
+            f"MinRole={tier.minimum_rbac_role:<9} · Mode={CYAN}{tier.governance_mode}{RESET}"
+        )
+
+    # 10. Built-in Repair REST & Webhook API
+    _section("10. REPAIR REST & WEBHOOK API (--serve-api)", "🔌")
+    for ep in report.repair_api_endpoints:
+        print(f"  {GREEN}{ep.method:<5}{RESET} {BOLD}{WHITE}{ep.path:<28}{RESET} {DIM}{ep.description}{RESET}")
+
+    print(f"\n{BOLD}{'═' * 68}{RESET}\n")
+
 
 
 

@@ -1,6 +1,6 @@
-# ASRE — Autonomous Software Reliability Engineer
+# Xargis — Autonomous Software Reliability & Causal Repair Platform
 
-**ASRE** is a deterministic, graph-grounded Autonomous Software Reliability Engineering platform that connects **multi-language repository intelligence**, **multi-hop cross-service causal discovery**, **4-tier progressive repair simulation & quantitative risk gating ($R_{\text{action}}$)**, **3-tier cognitive repair memory**, **pre-deployment change-risk prediction (Platt + exact SHAP)**, **4-pillar SLO & error budget governance**, and **Supabase PostgreSQL + SFT/DPO/LightGBM training pipelines** into a single auditable closed loop.
+**Xargis** is a deterministic, graph-grounded Autonomous Software Reliability Engineering (ASRE) platform that connects **multi-language repository intelligence**, **multi-hop cross-service causal discovery**, **4-tier progressive repair simulation & quantitative risk gating ($R_{\text{action}}$)**, **3-tier cognitive repair memory**, **pre-deployment change-risk prediction (Platt + exact SHAP)**, **4-pillar SLO & error budget governance**, **multi-tenant FastAPI + SSO/Vault integrations**, and **Supabase PostgreSQL + SFT/DPO/LightGBM training pipelines** into a single auditable closed loop.
 
 ---
 
@@ -110,12 +110,30 @@ All operational telemetry, causal graphs, repair runs, knowledge base entries, p
 
 ---
 
+### 8. 10 Commercial Enterprise & Product Differentiation Capabilities (`intelligence/commercial_enterprise.py`)
+1. **Multi-Repository Federated Intelligence (`--multi-repo`):** Indexes multiple repositories simultaneously, discovering shared package dependencies, cross-repo contracts, and federated blast radius.
+2. **Service Ownership Mapping:** Resolves responsible `@team` handles and primary/secondary code owners per subsystem using `CODEOWNERS` rules with an automatic **90-Day Git-Blame & Commit Authorship Fallback** and bus-factor warnings.
+3. **Incident Cost & Autonomous ROI Estimation:** Quantifies manual engineering toil cost (\$), SLA/revenue blast-radius impact (\$), SRE hours recovered, and MTTR speedup factor vs. human war-room baselines.
+4. **Repair Effectiveness Analytics:** Tracks longitudinal verification rates, recurrence-free survival (`%`), dead-end actions prevented, and top winning AST repair operators.
+5. **Engineering Reliability Scorecards (`0–100` Grade `A+` to `F`):** Computes weighted composite and per-team scorecards across Architecture Health, Change Safety, Repair Effectiveness, SLO Budget Health, and Tech Debt Hygiene.
+6. **Custom Declarative Repair Policies (`.asre/policy.json` / `--policy-file`):** Enforces custom `protected_path_globs`, `blocked_structural_operators`, `max_files_per_patch`, `max_changed_lines`, per-environment risk caps, and required `@team` approvers.
+7. **Team Knowledge Sharing:** Shares verified repair playbooks, parent-document runbooks, and portable AST repair operators across repositories and teams.
+8. **Private & Air-Gapped Deployment (`--private-mode`):** Enforces zero external telemetry/cloud egress, local worktree isolation, automatic secret redaction, local Ollama/vLLM endpoints, and a cryptographic SHA-256 compliance attestation.
+9. **Multi-Environment Governance Matrix:** Side-by-side policy enforcement across `development`, `staging`, and `production`.
+10. **FastAPI REST & Webhook Backend (`api/app.py` / `--serve-api`):** Full OpenAPI 3.1 + CORS backend exposing War-Room incident aggregation (`GET /api/v1/incidents/{id}/war-room`), 4-tier simulation (`POST /api/v1/incidents/{id}/simulate`), 1-click approval & rollback gates, Predictive Change Risk & PR overrides (`/api/v1/changes/deployments`), SLO-enriched Service Topology (`GET /api/v1/services/topology`), 3-Tier Repair Memory & Custom Policies (`/api/v1/memory/repairs`, `/api/v1/policies`), Executive Cost ROI (`GET /api/v1/analytics/overview`), and GitHub / Alertmanager ingestion webhooks (`/api/v1/webhooks/github`, `/api/v1/webhooks/alerts`).
+
+![10 Commercial Enterprise & Product Differentiation Capabilities](docs/screenshots/commercial_enterprise_capabilities.svg)
+
+---
+
 ## Project Layout
 
 ```text
 asre/
 ├── main.py                                  # CLI entrypoint & end-to-end workflow orchestrator
 ├── requirements.txt                         # Python dependencies
+├── api/                                     # FastAPI Backend & Frontend Integration (/api/v1 + /docs)
+│   └── app.py                               # War-Room, Change-Risk, Topology, Memory, ROI & Webhooks API
 ├── intelligence/                            # Repository, Graph, Change-Risk & SLO Intelligence
 │   ├── scanner.py                           # Ecosystem manifest & repository file scanner
 │   ├── analyzer.py                          # Tree-sitter AST symbol, import & call-graph extractor
@@ -127,6 +145,7 @@ asre/
 │   ├── query_engine.py                      # Hybrid keyword & BM25 codebase query engine
 │   ├── reliability_intelligence.py          # 3-Signal Pre-Deployment Change Risk (Platt + SHAP)
 │   ├── slo_intelligence.py                  # 4-Pillar SLO & Error Budget Intelligence engine
+│   ├── commercial_enterprise.py             # 10 Commercial Enterprise Capabilities & Repair REST API
 │   └── investor_verification.py             # 10-Point Production Readiness verification suite
 ├── repair/                                  # Incident Correlation, Simulation, Memory & Execution
 │   ├── incident_intelligence.py             # Single-stream telemetry deduplication & alert correlation
@@ -247,6 +266,22 @@ SUPABASE_DB_URL=postgresql://postgres.<your-project-ref>:<your-db-password>@aws-
 ./venv/bin/python main.py --local .repo_cache/click \
   --sync-db \
   --export-training-data .asre/training_datasets
+```
+
+### 7. Commercial Enterprise Capabilities, Multi-Repo & Repair REST API
+```bash
+# Run all 10 Commercial Differentiation Capabilities (Scorecard, Ownership, Cost ROI, Policies, Multi-Env)
+./venv/bin/python main.py --local .repo_cache/click --commercial-report
+
+# Run Multi-Repository Federated Intelligence across multiple repositories in strict Private Mode
+./venv/bin/python main.py --local .repo_cache/click \
+  --multi-repo /path/to/repo2 \
+  --private-mode
+
+# Start the Multi-Tenant FastAPI Backend & Swagger UI (repositories are added via the UI / API)
+./venv/bin/uvicorn api.app:app --reload --port 8080
+# or:
+./venv/bin/python main.py --serve-api --api-port 8080
 ```
 
 ---

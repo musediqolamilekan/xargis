@@ -22,6 +22,10 @@ from intelligence.reliability_intelligence import (
 )
 from intelligence.slo_intelligence import build_slo_intelligence_report
 from intelligence.investor_verification import run_investor_verification_suite
+from intelligence.commercial_enterprise import (
+    build_commercial_enterprise_report,
+    run_repair_api_server,
+)
 from repair import (
     LLMPatchPlanner,
     SUPPORTED_ENVIRONMENTS,
@@ -60,6 +64,7 @@ from reporting.profile_reporter import (
     print_query_results,
 )
 from reporting.repair_reporter import (
+    print_commercial_enterprise_report,
     print_cross_incident_intelligence_report,
     print_database_status_report,
     print_incident_intelligence_report,
@@ -97,6 +102,9 @@ def _needs_graph(args) -> bool:
         args.pre_deploy_check,
         args.slo_report,
         args.sync_db,
+        args.commercial_report,
+        args.multi_repo,
+        args.serve_api,
     ])
 
 
@@ -107,8 +115,8 @@ def _fuzzy_find(nodes: list[str], query: str) -> list[str]:
 
 def main():
     parser = argparse.ArgumentParser(
-        prog="asre",
-        description="🔍 Repository Intelligence Layer — deep code analysis powered by Tree-sitter",
+        prog="xargis",
+        description="🔍 Xargis — Autonomous Software Reliability & Causal Repair Platform",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -378,6 +386,43 @@ Examples:
         help="Export LLM SFT, DPO preference pairs, Tabular JIT change-risk CSV/JSONL, and Causal Graph datasets to DIR",
     )
 
+    # ── Commercial Enterprise & Product Capabilities ───────────────
+    comm_group = parser.add_argument_group("Commercial Enterprise & Product Capabilities")
+    comm_group.add_argument(
+        "--commercial-report",
+        action="store_true",
+        help="Run all 10 Commercial Differentiation Capabilities (Multi-Repo, Ownership, Cost ROI, Effectiveness, Scorecard, Custom Policies, Team KB, Private Mode, Multi-Env, Repair API)",
+    )
+    comm_group.add_argument(
+        "--multi-repo",
+        nargs="+",
+        default=(),
+        metavar="PATH",
+        help="Additional repository paths to include in Multi-Repository Federated Intelligence",
+    )
+    comm_group.add_argument(
+        "--policy-file",
+        metavar="JSON",
+        help="Custom declarative repair policy file (default: .asre/policy.json)",
+    )
+    comm_group.add_argument(
+        "--private-mode",
+        action="store_true",
+        help="Enforce strict air-gapped / zero-external-egress private deployment mode with SHA-256 compliance attestation",
+    )
+    comm_group.add_argument(
+        "--serve-api",
+        action="store_true",
+        help="Start the HTTP REST & Webhook Repair API server (/api/v1/health, /api/v1/scorecard, /api/v1/incidents/diagnose, /api/v1/pre-deploy/check)",
+    )
+    comm_group.add_argument(
+        "--api-port",
+        type=int,
+        default=8080,
+        metavar="PORT",
+        help="Port for --serve-api (default: 8080)",
+    )
+
     # ── Output ─────────────────────────────────────────────────────
     out_group = parser.add_argument_group("Output")
     out_group.add_argument(
@@ -417,6 +462,19 @@ Examples:
         parser.error("--apply and --create-pr require --verify-patch-plan")
     if args.role == "viewer" and (args.generate_patch_plan or args.verify_patch_plan or args.apply or args.create_pr):
         parser.error("RBAC role 'viewer' is read-only and cannot generate, verify, or apply patches")
+
+    if args.serve_api and not (args.repo or args.local):
+        from api.app import run_fastapi_server
+
+        run_fastapi_server(
+            None,
+            port=args.api_port,
+            repair_run_dir=args.repair_run_dir or ".asre/runs",
+            policy_file=args.policy_file,
+            private_mode=args.private_mode,
+            additional_repos=args.multi_repo,
+        )
+        return
 
     if not args.repo and not args.local:
         if args.init_db or args.db_status or args.sync_db or args.export_training_data:
@@ -954,6 +1012,35 @@ Examples:
             print(json.dumps({"slo_intelligence": slo_rep.to_dict()}, indent=2, default=str))
         else:
             print_slo_intelligence_report(slo_rep)
+
+    if args.commercial_report or args.multi_repo:
+        comm_rep = build_commercial_enterprise_report(
+            repo_path,
+            intel,
+            graph,
+            profiles,
+            additional_repos=args.multi_repo,
+            repair_run_dir=args.repair_run_dir or ".asre/runs",
+            policy_file=args.policy_file,
+            private_mode=args.private_mode,
+            supabase_configured=db_store.is_configured,
+        )
+        if args.json:
+            print(json.dumps({"commercial_enterprise": comm_rep.to_dict()}, indent=2, default=str))
+        else:
+            print_commercial_enterprise_report(comm_rep)
+
+    if args.serve_api:
+        run_repair_api_server(
+            repo_path,
+            intel,
+            graph,
+            profiles,
+            port=args.api_port,
+            repair_run_dir=args.repair_run_dir or ".asre/runs",
+            policy_file=args.policy_file,
+            private_mode=args.private_mode,
+        )
 
     if args.sync_db:
         repo_sync = db_store.sync_repository_scan(repo_path, intel, graph, profiles)

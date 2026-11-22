@@ -174,6 +174,7 @@ CREATE TABLE IF NOT EXISTS public.asre_slo_snapshots (
 -- 8. Immutable Enterprise SOC2 Audit Trail
 CREATE TABLE IF NOT EXISTS public.asre_audit_logs (
     audit_id TEXT PRIMARY KEY,
+    org_id UUID NOT NULL DEFAULT '00000000-0000-0000-0000-000000000001'::uuid,
     repo_id TEXT NOT NULL,
     timestamp TIMESTAMPTZ NOT NULL,
     incident_id TEXT NOT NULL,
@@ -188,9 +189,75 @@ CREATE TABLE IF NOT EXISTS public.asre_audit_logs (
 
 CREATE INDEX IF NOT EXISTS idx_asre_audit_logs_incident ON public.asre_audit_logs(incident_id);
 
+-- 9. Multi-Tenant Encrypted Platform Integrations (GitHub App, Datadog, PagerDuty, Slack, K8s)
+CREATE TABLE IF NOT EXISTS public.asre_integrations (
+    integration_id TEXT PRIMARY KEY,
+    org_id UUID NOT NULL DEFAULT '00000000-0000-0000-0000-000000000001'::uuid,
+    platform TEXT NOT NULL,
+    category TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'connected',
+    installation_id TEXT DEFAULT '',
+    external_id TEXT DEFAULT '',
+    encrypted_credentials_vault TEXT DEFAULT '',
+    webhook_secret_hash TEXT DEFAULT '',
+    webhook_url TEXT DEFAULT '',
+    config_json JSONB DEFAULT '{}'::jsonb,
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_asre_integrations_org_id ON public.asre_integrations(org_id, platform);
+CREATE INDEX IF NOT EXISTS idx_asre_integrations_install ON public.asre_integrations(installation_id);
+
+-- 10. Per-Tenant Isolated Async Webhook & Execution Job Queue
+CREATE TABLE IF NOT EXISTS public.asre_tenant_jobs (
+    job_id TEXT PRIMARY KEY,
+    org_id UUID NOT NULL DEFAULT '00000000-0000-0000-0000-000000000001'::uuid,
+    event_type TEXT NOT NULL,
+    platform TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'completed',
+    worker_id TEXT DEFAULT 'asre-stateless-worker-1',
+    payload_json JSONB DEFAULT '{}'::jsonb,
+    result_json JSONB DEFAULT '{}'::jsonb,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_asre_tenant_jobs_org_id ON public.asre_tenant_jobs(org_id, status);
+
+-- 11. Multi-Tenant Organizations (Tenancy Root, Plan Tier & SSO Domain)
+CREATE TABLE IF NOT EXISTS public.asre_organizations (
+    org_id UUID PRIMARY KEY DEFAULT '00000000-0000-0000-0000-000000000001'::uuid,
+    org_name TEXT NOT NULL,
+    slug TEXT NOT NULL,
+    plan_tier TEXT DEFAULT 'enterprise',
+    sso_domain TEXT DEFAULT '',
+    sso_providers_json JSONB DEFAULT '["google", "github"]'::jsonb,
+    settings_json JSONB DEFAULT '{}'::jsonb,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 12. Multi-Tenant Users (Email/Password PBKDF2 + Google & GitHub SSO Identities)
+CREATE TABLE IF NOT EXISTS public.asre_users (
+    user_id TEXT PRIMARY KEY,
+    org_id UUID NOT NULL DEFAULT '00000000-0000-0000-0000-000000000001'::uuid,
+    email TEXT NOT NULL,
+    full_name TEXT DEFAULT '',
+    role TEXT NOT NULL DEFAULT 'sre',
+    auth_provider TEXT NOT NULL DEFAULT 'email',
+    provider_user_id TEXT DEFAULT '',
+    password_hash TEXT DEFAULT '',
+    avatar_url TEXT DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'active',
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    last_login_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_asre_users_email ON public.asre_users(email);
+CREATE INDEX IF NOT EXISTS idx_asre_users_org_id ON public.asre_users(org_id);
+
 -- ============================================================================
--- Permissive Row-Level Security (RLS) policies for authenticated & anon API key
--- so PostgREST upserts/selects work seamlessly via SUPABASE_KEY
+-- Multi-Tenant Organization Isolation (`org_id UUID NOT NULL`) + RLS Policies
+-- Ensures every table has `org_id` and enforces tenant isolation via JWT claims
 -- ============================================================================
 DO $$
 DECLARE
@@ -204,13 +271,25 @@ BEGIN
         'asre_knowledge_base',
         'asre_change_risk_records',
         'asre_slo_snapshots',
-        'asre_audit_logs'
+        'asre_audit_logs',
+        'asre_integrations',
+        'asre_tenant_jobs',
+        'asre_organizations',
+        'asre_users'
     ]
     LOOP
+        EXECUTE format(
+            'ALTER TABLE public.%I ADD COLUMN IF NOT EXISTS org_id UUID NOT NULL DEFAULT ''00000000-0000-0000-0000-000000000001''::uuid;',
+            tbl
+        );
+        EXECUTE format('CREATE INDEX IF NOT EXISTS idx_%I_org_id ON public.%I(org_id);', tbl, tbl);
         EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY;', tbl);
         EXECUTE format('DROP POLICY IF EXISTS asre_all_access ON public.%I;', tbl);
+        EXECUTE format('DROP POLICY IF EXISTS asre_tenant_isolation ON public.%I;', tbl);
         EXECUTE format(
-            'CREATE POLICY asre_all_access ON public.%I FOR ALL TO anon, authenticated, service_role USING (true) WITH CHECK (true);',
+            'CREATE POLICY asre_tenant_isolation ON public.%I FOR ALL TO anon, authenticated, service_role '
+            'USING (org_id = COALESCE(NULLIF(current_setting(''request.jwt.claims'', true)::jsonb -> ''app_metadata'' ->> ''org_id'', '''')::uuid, NULLIF(current_setting(''request.jwt.claims'', true)::jsonb ->> ''org_id'', '''')::uuid, org_id)) '
+            'WITH CHECK (org_id = COALESCE(NULLIF(current_setting(''request.jwt.claims'', true)::jsonb -> ''app_metadata'' ->> ''org_id'', '''')::uuid, NULLIF(current_setting(''request.jwt.claims'', true)::jsonb ->> ''org_id'', '''')::uuid, org_id));',
             tbl
         );
         EXECUTE format('GRANT ALL ON TABLE public.%I TO anon, authenticated, service_role;', tbl);

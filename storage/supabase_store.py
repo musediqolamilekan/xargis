@@ -40,6 +40,10 @@ SUPABASE_TABLES: tuple[str, ...] = (
     "asre_change_risk_records",
     "asre_slo_snapshots",
     "asre_audit_logs",
+    "asre_integrations",
+    "asre_tenant_jobs",
+    "asre_organizations",
+    "asre_users",
 )
 
 TABLE_PRIMARY_KEYS: dict[str, str] = {
@@ -51,6 +55,10 @@ TABLE_PRIMARY_KEYS: dict[str, str] = {
     "asre_change_risk_records": "check_id",
     "asre_slo_snapshots": "snapshot_id",
     "asre_audit_logs": "audit_id",
+    "asre_integrations": "integration_id",
+    "asre_tenant_jobs": "job_id",
+    "asre_organizations": "org_id",
+    "asre_users": "user_id",
 }
 
 

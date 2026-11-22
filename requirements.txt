@@ -1,4 +1,6 @@
 tree-sitter==0.21.3
 tree-sitter-languages
 GitPython
-
+fastapi>=0.110.0
+uvicorn>=0.27.0
+httpx>=0.27.0
